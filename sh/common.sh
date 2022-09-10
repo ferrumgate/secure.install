@@ -1,22 +1,27 @@
 #!/bin/sh
-
+TRUE=0
+FALSE=1
 
 ### log functions
 
-info()
-{
+info() {
     echo '[INFO] ' "$@"
 }
-warn()
-{
+error() {
+    echo '[ERROR] ' "$@" >&2
+}
+warn() {
     echo '[WARN] ' "$@" >&2
 }
-fatal()
-{
-    echo '[ERROR] ' "$@" >&2
+fatal() {
+    echo '[FATAL] ' "$@" >&2
     exit 1
 }
-
+debug() {
+    if [ $ENV_FOR != "PROD" ]; then
+        echo '[INFO] ' "$@"
+    fi
+}
 
 #### add quotes to command arguments
 quote() {
@@ -42,4 +47,3 @@ escape() {
 escape_dq() {
     printf '%s' "$@" | sed -e 's/"/\\"/g'
 }
-
