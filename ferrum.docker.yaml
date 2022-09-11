@@ -1,4 +1,89 @@
 version: "3.9"
 services:
-  webapp:
-    build: ./dir
+  redis: 
+    image: redis:latest
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        max_replicas_per_node: 1
+        constraints:
+          - "node.role==manager"
+      restart_policy:
+        delay: 5s
+    networks:
+      - ferrum
+
+  server:
+    image: _PRIVATE_REGISTRY/ferrumgate/secure.server:1.0.0
+    ports:
+      - '9999:9999'
+    environment:
+      - REDIS_HOST=redis:6379
+      - LOGIN_URL=_LOGIN_URL
+      - PORT=9999
+    cap_add:
+      - NET_ADMIN
+    deploy:
+      mode: global
+      restart_policy:
+        delay: 5s
+    volumes:
+      - /dev/net/tun:/dev/net/tun
+    networks:
+      - ferrum
+
+  ui:
+    image: _PRIVATE_REGISTRY/ferrumgate/ui.portal:1.0.0
+    ports:
+      - '9898:80'
+    deploy:
+      restart_policy:
+        delay: 5s
+    networks:
+      - ferrum
+
+  rest:
+    image: _PRIVATE_REGISTRY/ferrumgate/rest.portal:1.0.0
+    environment:
+      - PORT=8181
+      - REDIS_HOST=redis:6379
+      - BASE_RATE_LIMIT=25
+    deploy:
+      restart_policy:
+        delay: 5s
+    volumes:
+      - /etc/ferrumgate:/etc/ferrumgate
+    networks:
+      - ferrum
+
+  nginx:
+    image: nginx:1.23-alpine
+    ports:
+      - '80:80'
+      - '443:443'
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        delay: 5s
+    configs:
+      - source: nginx_config
+        target: /etc/nginx/conf.d/default.conf
+    networks:
+      - ferrum
+  
+
+configs:
+  nginx_config:
+    file: ./conf/nginx.conf
+  
+
+networks:
+  ferrum:
+    external: true
+  host:
+    external: true
+
+    
+  

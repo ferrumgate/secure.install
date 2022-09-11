@@ -88,36 +88,58 @@ download() {
 }
 
 download_and_verify() {
-    [ $ENV_FOR != "PROD" ] && return 0
+    [ "$ENV_FOR" != "PROD" ] && return 0
     mkdir -p ./sh
     verify_downloader curl || verify_downloader wget || fatal 'can not find curl or wget for downloading files'
-    download "$"
+    download "$*"
 }
 
 print_usage() {
     echo "usage"
-    echo "  ./install.sh -h  -> prints help"
-    echo "  ./install.sh -d  -> install with docker"
-    echo "  ./install.sh -s  -> install with docker-swarm"
+    echo "  ./install.sh -h (--help)        -> prints help"
+    echo "  ./install.sh -d (--docker)      -> install with docker"
+    echo "  ./install.sh -s (--docker-swarm)-> install with docker-swarm"
 
 }
 
 main() {
     # install type
-    INSTALL="docker"
+    local INSTALL="docker"
 
-    # read args
-    while getopts hds flag; do
-        case "${flag}" in
-        h) HELP=TRUE ;;
-        d) INSTALL="docker" ;;
-        s) INSTALL="docker-swarm" ;;
+    ARGS=$(getopt -o 'hds' --long 'help,docker,docker-swarm' -- "$@") || exit
+    eval "set -- $ARGS"
+    local HELP=1
+    while true; do
+        case $1 in
+        -h | --help)
+            HELP=0
+            shift
+            break
+            ;;
+        -d | --docker)
+            INSTALL="docker"
+            shift
+            break
+            ;;
+        -s | --docker-swarm)
+            INSTALL="docker-swarm"
+            shift
+            break
+            ;;
+        --)
+            shift
+            break
+            ;;
+        *)
+            print_usage
+            exit 1
+            ;; # error
         esac
     done
 
-    [ $HELP -eq $TRUE ] && print_usage && exit 0
-
+    [ $HELP -eq 0 ] && print_usage && exit 0
     info "check architecture"
+
     setup_verify_arch
 
     info "download install scripts from github"
@@ -143,13 +165,17 @@ main() {
     #    info "restarting microk8s"
     #    microk8s_restart
     #fi
-    if [ $INSTALL = "docker" ]; then
+    if [ "$INSTALL" = "docker" ]; then
         #prerequities
-        docker_install
-        docker_network_configure
-        docker_compose
+        #docker_install
+        #docker_network_bridge_configure ferrum
+        if [ $ENV_FOR != "PROD" ]; then # for test use local private registry
+            sed -i 's#_PRIVATE_REGISTRY/#registry.ferrumgate.local/#g' ferrum.docker.yaml
+        fi
+
+        docker compose -f ferrum.docker.yaml up -d
 
     fi
 }
 
-main
+main $*

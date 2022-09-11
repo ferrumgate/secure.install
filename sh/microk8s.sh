@@ -1,5 +1,5 @@
 #!/bin/sh
-##################3 under development
+################## under development ########################
 #### include common.sh
 if [ -f "common.sh" ]; then
     . ./common.sh
