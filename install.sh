@@ -169,11 +169,12 @@ main() {
         #prerequities
         #docker_install
         #docker_network_bridge_configure ferrum
+        enc_key=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w ${1:-32} | head -n 1)
         if [ $ENV_FOR != "PROD" ]; then # for test use local private registry
             sed -i 's#_PRIVATE_REGISTRY/#registry.ferrumgate.local/#g' ferrum.docker.yaml
         fi
 
-        docker compose -f ferrum.docker.yaml up -d
+        docker compose -f ferrum.docker.yaml -p ferrumgate up -d
 
     fi
 }
