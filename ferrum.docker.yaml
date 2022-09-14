@@ -14,7 +14,6 @@ services:
         delay: 5s
     networks:
       - ferrum
-      - ferrum2
 
   server:
     image: _PRIVATE_REGISTRY/ferrumgate/secure.server:1.0.0
@@ -23,8 +22,8 @@ services:
       - '9999:9999'
     environment:
       - REDIS_HOST=redis#6379
-      - LOGIN_URL=http://192.168.88.51/login  #_LOGIN_URL
       - PORT=9999
+      - LOGIN_URL=http://192.168.88.51/login
     cap_add:
       - NET_ADMIN
     deploy:
@@ -33,18 +32,24 @@ services:
         delay: 5s
     volumes:
       - /dev/net/tun:/dev/net/tun
+      - /etc/ferrumgate:/etc/ferrumgate
     networks:
       - ferrum
 
   admin:
-    image: nginx:1.23-alpine
+    image: _PRIVATE_REGISTRY/ferrumgate/job.admin:1.0.0
     restart: always
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - REDIS_HOST=redis:6379
     deploy:
       mode: global
       restart_policy:
         delay: 5s
-    networks:
-      - outside
+    volumes:
+      - /etc/ferrumgate:/etc/ferrumgate
+    network_mode: service:server
 
 
 
@@ -76,6 +81,9 @@ services:
   nginx:
     image: nginx:1.23-alpine
     restart: always
+    ports:
+      - 80:80
+      - 443:443
     deploy:
       mode: replicated
       replicas: 1
@@ -95,14 +103,8 @@ configs:
 
 networks:
   ferrum:
-    external:
-      name: ferrum
-  outside:
-    external:
-      name: host
-  ferrum2:
-    external:
-      name: ferrum2
+    external: true
+
 
     
   

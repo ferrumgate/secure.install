@@ -174,6 +174,8 @@ main() {
             sed -i 's#_PRIVATE_REGISTRY/#registry.ferrumgate.local/#g' ferrum.docker.yaml
         fi
 
+        docker compose -f ferrum.docker.yaml stop
+        docker compose -f ferrum.docker.yaml pull
         docker compose -f ferrum.docker.yaml -p ferrumgate up -d
 
     fi
