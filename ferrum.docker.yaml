@@ -14,6 +14,8 @@ services:
         delay: 5s
     networks:
       - ferrum
+    logging:
+      driver: local
 
   server:
     image: _PRIVATE_REGISTRY/ferrumgate/secure.server:1.0.0
@@ -32,15 +34,20 @@ services:
         delay: 5s
     volumes:
       - /dev/net/tun:/dev/net/tun
+      - /dev/urandom:/dev/urandom
       - /etc/ferrumgate:/etc/ferrumgate
     networks:
       - ferrum
+    logging:
+      driver: local
 
   admin:
     image: _PRIVATE_REGISTRY/ferrumgate/job.admin:1.0.0
     restart: always
-    cap_add:
-      - NET_ADMIN
+    privileged: true
+    #cap_add:
+    #  - NET_ADMIN
+    #  - MKNOD
     environment:
       - REDIS_HOST=redis:6379
     deploy:
@@ -50,6 +57,8 @@ services:
     volumes:
       - /etc/ferrumgate:/etc/ferrumgate
     network_mode: service:server
+    logging:
+      driver: local
 
 
 
@@ -61,6 +70,8 @@ services:
         delay: 5s
     networks:
       - ferrum
+    logging:
+      driver: local
 
   rest:
     image: _PRIVATE_REGISTRY/ferrumgate/rest.portal:1.0.0
@@ -77,6 +88,8 @@ services:
       - /etc/ferrumgate:/etc/ferrumgate
     networks:
       - ferrum
+    logging:
+      driver: local
 
   nginx:
     image: nginx:1.23-alpine
@@ -94,6 +107,8 @@ services:
         target: /etc/nginx/conf.d/default.conf
     networks:
       - ferrum
+    logging:
+      driver: local
   
 
 configs:

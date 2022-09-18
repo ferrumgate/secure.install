@@ -147,11 +147,15 @@ main() {
 
     # after download add other scripts
     . ./sh/common.sh
+
     . ./sh/util.sh
+
     . ./sh/prerequities.sh
-    . ./sh/microk8s.sh
+
+    #. ./sh/microk8s.sh
     . ./sh/docker.sh
-    . ./sh/docker.swarm.sh
+
+    #. ./sh/docker.swarm.sh
 
     #prerequities
     #microk8s_install
@@ -165,13 +169,18 @@ main() {
     #    info "restarting microk8s"
     #    microk8s_restart
     #fi
+
     if [ "$INSTALL" = "docker" ]; then
         #prerequities
         #docker_install
         #docker_network_bridge_configure ferrum
-        enc_key=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w ${1:-32} | head -n 1)
+
+        enc_key=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 32 | head -n 1)
+
         if [ $ENV_FOR != "PROD" ]; then # for test use local private registry
+
             sed -i 's#_PRIVATE_REGISTRY/#registry.ferrumgate.local/#g' ferrum.docker.yaml
+
         fi
 
         docker compose -f ferrum.docker.yaml stop
