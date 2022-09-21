@@ -147,45 +147,41 @@ main() {
 
     # after download add other scripts
     . ./sh/common.sh
-
     . ./sh/util.sh
-
     . ./sh/prerequities.sh
-
-    #. ./sh/microk8s.sh
     . ./sh/docker.sh
-
-    #. ./sh/docker.swarm.sh
-
-    #prerequities
-    #microk8s_install
-    #microk8s_check_isworking
-    #microk8s_enable_modules
-    #microk8s_enable_ipvs || is_ipvs_changed=$?
-    #debug "is_ipvs_changed:$is_ipvs_changed"
-    #microk8s_prepare_networks || is_network_changed=$?
-
-    #if [ is_ipvs_changed ] || [is_network_changed]; then
-    #    info "restarting microk8s"
-    #    microk8s_restart
-    #fi
 
     if [ "$INSTALL" = "docker" ]; then
         #prerequities
         #docker_install
         #docker_network_bridge_configure ferrum
 
+        # prepare folder permission to only root
+        chmod -R 600 $(pwd)
+        DOCKER_FILE=ferrum.docker-compose.yaml
         enc_key=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 32 | head -n 1)
 
         if [ $ENV_FOR != "PROD" ]; then # for test use local private registry
 
-            sed -i 's#_PRIVATE_REGISTRY/#registry.ferrumgate.local/#g' ferrum.docker.yaml
+            sed -i 's#_PRIVATE_REGISTRY/#registry.ferrumgate.local/#g' $DOCKER_FILE
+        else
+            sed -i 's#_PRIVATE_REGISTRY/##g' $DOCKER_FILE
 
         fi
 
-        docker compose -f ferrum.docker.yaml stop
-        docker compose -f ferrum.docker.yaml pull
-        docker compose -f ferrum.docker.yaml -p ferrumgate up -d
+        # set redis password
+        redis_needs_password=$(cat $DOCKER_FILE | grep "requirepass password" | true)
+        if [ -z "$redis_needs_password" ]; then #not found
+            info "configuring redis password"
+            redis_pass=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 64 | head -n 1)
+            sed -i "s/REDIS_PASS=password/REDIS_PASS=$redis_pass/g" $DOCKER_FILE
+            sed -i "s/--requirepass password/--requirepass $redis_pass/g" $DOCKER_FILE
+
+        fi
+
+        docker compose -f $DOCKER_FILE down
+        docker compose -f $DOCKER_FILE pull
+        docker compose -f $DOCKER_FILE -p ferrumgate up -d
 
     fi
 }

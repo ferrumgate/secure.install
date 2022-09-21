@@ -1,7 +1,8 @@
 version: "3.9"
 services:
-  redis: 
-    image: redis:latest
+  redis:
+    image: redis:7-bullseye
+    command: redis-server --requirepass password --protected-mode yes --daemonize no --tcp-backlog 511 --timeout 0 --tcp-keepalive 300  --maxclients 100000 --appendonly yes --dir /data
     restart: always
     deploy:
       mode: replicated
@@ -14,6 +15,8 @@ services:
         delay: 5s
     networks:
       - ferrum
+    volumes:
+      - /var/lib/redis:/data
     logging:
       driver: local
 
@@ -24,6 +27,7 @@ services:
       - '9999:9999'
     environment:
       - REDIS_HOST=redis#6379
+      - REDIS_PASS=password
       - PORT=9999
       - LOGIN_URL=http://192.168.88.51/login
     cap_add:
@@ -50,6 +54,7 @@ services:
     #  - MKNOD
     environment:
       - REDIS_HOST=redis:6379
+      - REDIS_PASS=password
     deploy:
       mode: global
       restart_policy:
@@ -59,8 +64,6 @@ services:
     network_mode: service:server
     logging:
       driver: local
-
-
 
   ui:
     image: _PRIVATE_REGISTRY/ferrumgate/ui.portal:1.0.0
@@ -79,6 +82,7 @@ services:
     environment:
       - PORT=8181
       - REDIS_HOST=redis:6379
+      - REDIS_PASS=password
       - BASE_RATE_LIMIT=25
       - ENCRYPT_KEY=rktIuxHZLZXXRFFrPtTLxYHyFWZcsoef
     deploy:
@@ -109,17 +113,11 @@ services:
       - ferrum
     logging:
       driver: local
-  
 
 configs:
   nginx_config:
     file: ./conf/nginx.conf
-  
 
 networks:
   ferrum:
     external: true
-
-
-    
-  
