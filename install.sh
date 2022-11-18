@@ -175,6 +175,8 @@ main() {
             info "configuring redis password"
             redis_pass=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 64 | head -n 1)
             sed -i "s/REDIS_PASS=password/REDIS_PASS=$redis_pass/g" $DOCKER_FILE
+            sed -i "s/REDIS_LOCAL_PASS=password/REDIS_LOCAL_PASS=$redis_pass/g" $DOCKER_FILE
+            sed -i "s/REDIS_SLAVE_PASS=password/REDIS_SLAVE_PASS=$redis_pass/g" $DOCKER_FILE
             sed -i "s/--requirepass password/--requirepass $redis_pass/g" $DOCKER_FILE
 
         fi
