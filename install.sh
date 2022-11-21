@@ -159,31 +159,49 @@ main() {
         # prepare folder permission to only root
         chmod -R 600 $(pwd)
         DOCKER_FILE=ferrum.docker-compose.yaml
-        enc_key=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 32 | head -n 1)
+        cp $DOCKER_FILE compose.yaml
+        DOCKER_FILE=compose.yaml
 
         if [ $ENV_FOR != "PROD" ]; then # for test use local private registry
 
-            sed -i 's#_PRIVATE_REGISTRY/#registry.ferrumgate.local/#g' $DOCKER_FILE
+            sed -i 's#??PRIVATE_REGISTRY/#registry.ferrumgate.local/#g' $DOCKER_FILE
         else
-            sed -i 's#_PRIVATE_REGISTRY/##g' $DOCKER_FILE
+            sed -i 's#??PRIVATE_REGISTRY/##g' $DOCKER_FILE
 
         fi
+        LOG_LEVEL=info
+        GATEWAY_ID=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 16 | head -n 1)
+        REDIS_PASS=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 64 | head -n 1)
+        ES_PASS=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 64 | head -n 1)
+        ENCRYPT_KEY=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 32 | head -n 1)
+        if [ $ENV_FOR != "PROD" ]; then
+            GATEWAY_ID=4s6ro4xte8009p96
+            REDIS_PASS=1dpkz8g8xg6e8tfz3tv1usddjhcu1m81pjcp2ai9je08zlop73t64eis6y0thxlv
+            ES_PASS=ux4eyrkbr47z6sckyf9zmavvgzxgvrzebsh082dumfk59j3b5ti9fvy95s7sybmx
+            ENCRYPT_KEY=6ydkxusirp6jy3ahttvd6m9v84axa0xt
+            LOG_LEVEL=debug
+
+        fi
+        # set gateway id
+        info "configuring gateway id"
+        sed -i "s/??GATEWAY_ID/$GATEWAY_ID/g" $DOCKER_FILE
 
         # set redis password
-        redis_needs_password=$(cat $DOCKER_FILE | grep "requirepass password" | true)
-        if [ -z "$redis_needs_password" ]; then #not found
-            info "configuring redis password"
-            redis_pass=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 64 | head -n 1)
-            sed -i "s/REDIS_PASS=password/REDIS_PASS=$redis_pass/g" $DOCKER_FILE
-            sed -i "s/REDIS_LOCAL_PASS=password/REDIS_LOCAL_PASS=$redis_pass/g" $DOCKER_FILE
-            sed -i "s/REDIS_SLAVE_PASS=password/REDIS_SLAVE_PASS=$redis_pass/g" $DOCKER_FILE
-            sed -i "s/--requirepass password/--requirepass $redis_pass/g" $DOCKER_FILE
+        info "configuring redis password"
+        sed -i "s/??REDIS_PASS/$REDIS_PASS/g" $DOCKER_FILE
 
-        fi
+        info "configuring enc key"
+        sed -i "s/??ENCRYPT_KEY/$ENCRYPT_KEY/g" $DOCKER_FILE
+
+        info "configuring es password"
+        sed -i "s/??ES_PASS/$ES_PASS/g" $DOCKER_FILE
+
+        info "configuring log level"
+        sed -i "s/??LOG_LEVEL/$LOG_LEVEL/g" $DOCKER_FILE
 
         docker compose -f $DOCKER_FILE down
         docker compose -f $DOCKER_FILE pull
-        docker compose -f $DOCKER_FILE -p ferrumgate up -d
+        docker compose -f $DOCKER_FILE -p ferrumgate up -d --remove-orphans
 
     fi
 }
