@@ -169,7 +169,7 @@ main() {
             sed -i 's#??PRIVATE_REGISTRY/##g' $DOCKER_FILE
 
         fi
-
+        LOG_LEVEL=info
         GATEWAY_ID=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 16 | head -n 1)
         REDIS_PASS=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 64 | head -n 1)
         ES_PASS=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 64 | head -n 1)
@@ -179,6 +179,7 @@ main() {
             REDIS_PASS=1dpkz8g8xg6e8tfz3tv1usddjhcu1m81pjcp2ai9je08zlop73t64eis6y0thxlv
             ES_PASS=ux4eyrkbr47z6sckyf9zmavvgzxgvrzebsh082dumfk59j3b5ti9fvy95s7sybmx
             ENCRYPT_KEY=6ydkxusirp6jy3ahttvd6m9v84axa0xt
+            LOG_LEVEL=debug
 
         fi
         # set gateway id
@@ -194,6 +195,9 @@ main() {
 
         info "configuring es password"
         sed -i "s/??ES_PASS/$ES_PASS/g" $DOCKER_FILE
+
+        info "configuring log level"
+        sed -i "s/??LOG_LEVEL/$LOG_LEVEL/g" $DOCKER_FILE
 
         docker compose -f $DOCKER_FILE down
         docker compose -f $DOCKER_FILE pull

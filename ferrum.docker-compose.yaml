@@ -141,6 +141,7 @@ services:
       - FERRUM_IO_IMAGE=??PRIVATE_REGISTRY/ferrumgate/ferrum.io:1.0.0
       - ENCRYPT_KEY=??ENCRYPT_KEY
       - GATEWAY_ID=??GATEWAY_ID
+      - LOG_LEVEL=??LOG_LEVEL
     depends_on:
       - redis
       - server
@@ -183,6 +184,7 @@ services:
       - ES_USER=elastic
       - ES_PASS=??ES_PASS
       - GATEWAY_ID=??GATEWAY_ID
+      - LOG_LEVEL=??LOG_LEVEL
     depends_on:
       - redis
       - server
