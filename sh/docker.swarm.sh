@@ -16,6 +16,6 @@ docker_swarm_install() {
     docker network create --opt encrypted --driver overlay --subnet=10.100.0.0/16 \
         --gateway=10.100.0.1 \
         --attachable \
-        ferrum
+        ferrum-swarm
 
 }
