@@ -95,12 +95,21 @@ uninstall() {
         info "uninstall finished successfully"
     fi
 }
+ensure_root() {
+    WUSER=$(id -u)
+    if [ ! "$WUSER" -eq 0 ]; then
+        echo "root privilges need"
+        exit 1
+    fi
+
+}
 
 main() {
+    ensure_root
 
     ARGS=$(getopt -o 'hsxlu' --long 'help,start,stop,status,uninstall' -- "$@") || exit
     eval "set -- $ARGS"
-    local opt=0
+    local opt=1
     while true; do
         case $1 in
         -h | --help)

@@ -66,9 +66,17 @@ verify_downloader() {
     DOWNLOADER=$1
     return 0
 }
+#### verify existence of network downloader executable
+verify_command() {
+    # Return failure if it doesn't exist or is no executable
+    [ -x "$(command -v $1)" ] || return 1
+
+    return 0
+}
 
 #### download from github url ---
 download() {
+    echo $*
     [ $# -eq 2 ] || fatal 'download needs exactly 2 arguments'
 
     case $DOWNLOADER in
@@ -89,9 +97,12 @@ download() {
 
 download_and_verify() {
     [ "$ENV_FOR" != "PROD" ] && return 0
-    mkdir -p ./sh
     verify_downloader curl || verify_downloader wget || fatal 'can not find curl or wget for downloading files'
-    download "$*"
+    verify_command unzip || fatal "can not find unzip command"
+    download install.zip https://github.com/ferrumgate/secure.install/archive/refs/heads/master.zip
+    unzip install.zip
+    mv secure.install-master secure.install
+    cd secure.install
 }
 
 print_usage() {
@@ -123,8 +134,17 @@ EOF
     systemctl enable ferrumgate
 
 }
+ensure_root() {
+    WUSER=$(id -u)
+    if [ ! "$WUSER" -eq 0 ]; then
+        echo "root privilges need"
+        exit 1
+    fi
+
+}
 
 main() {
+    ensure_root
     # install type
     local INSTALL="docker"
     ARGS=$(getopt -o 'hds' --long 'help,docker,docker-swarm' -- "$@") || exit
