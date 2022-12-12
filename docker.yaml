@@ -2,13 +2,13 @@ version: "3.9"
 networks:
   ferrum:
     external: true
-  ferrum-swarm:
-    external: true
 
 volumes:
   redis:
   es:
   ferrum:
+
+
 services:
 
   prepare:
@@ -77,6 +77,7 @@ services:
       - ELASTIC_PASSWORD=??ES_PASS
       - discovery.type=single-node
       - xpack.security.enabled=true
+      - xpack.ml.enabled=false
     deploy:
       mode: replicated
       replicas: 1
@@ -98,8 +99,8 @@ services:
     logging:
       driver: local
 
-  server:
-    image: "??PRIVATE_REGISTRY/ferrumgate/secure.server:1.0.0"
+  server-ssh:
+    image: "??PRIVATE_REGISTRY/ferrumgate/secure.server.ssh:1.0.0"
     restart: always
     ports:
       - '9999:9999'
