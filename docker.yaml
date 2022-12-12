@@ -2,13 +2,13 @@ version: "3.9"
 networks:
   ferrum:
     external: true
-  ferrum-swarm:
-    external: true
 
 volumes:
   redis:
   es:
   ferrum:
+
+
 services:
 
   prepare:
@@ -22,6 +22,8 @@ services:
           echo "file does not exits"
           echo "gatewayId=??GATEWAY_ID"> $$CONF_FILE
         fi
+    networks:
+      - ferrum
     volumes:
       - ferrum:/data
   redis:
@@ -75,6 +77,7 @@ services:
       - ELASTIC_PASSWORD=??ES_PASS
       - discovery.type=single-node
       - xpack.security.enabled=true
+      - xpack.ml.enabled=false
     deploy:
       mode: replicated
       replicas: 1
@@ -96,8 +99,8 @@ services:
     logging:
       driver: local
 
-  server:
-    image: "??PRIVATE_REGISTRY/ferrumgate/secure.server:1.0.0"
+  server-ssh:
+    image: "??PRIVATE_REGISTRY/ferrumgate/secure.server.ssh:1.0.0"
     restart: always
     ports:
       - '9999:9999'
@@ -105,7 +108,6 @@ services:
       - REDIS_HOST=redis#6379
       - REDIS_PASS=??REDIS_PASS
       - PORT=9999
-      - LOGIN_URL=http://192.168.88.51/login
       - GATEWAY_ID=??GATEWAY_ID
     cap_add:
       - NET_ADMIN
@@ -209,6 +211,42 @@ services:
       - /bin/sh
       - -c
       - |
+        CONF_FILE=/etc/nginx/nginx.conf
+
+        cat > $$CONF_FILE << EOF
+        user  nginx;
+        worker_processes  auto;
+
+        error_log  /var/log/nginx/error.log notice;
+        pid        /var/run/nginx.pid;
+
+
+        events {
+            worker_connections  1024;
+        }
+
+
+        http {
+            include       /etc/nginx/mime.types;
+            default_type  application/octet-stream;
+
+            log_format  main  '\$$remote_addr - \$$remote_user [\$$time_local] "\$$request" '
+                              '\$$status \$$body_bytes_sent "\$$http_referer" '
+                              '"\$$http_user_agent" "\$$http_x_forwarded_for"';
+
+            access_log  /var/log/nginx/access.log  main;
+            server_tokens off;
+            sendfile        on;
+            #tcp_nopush     on;
+
+            keepalive_timeout  65;
+
+            #gzip  on;
+
+            include /etc/nginx/conf.d/*.conf;
+        }
+        EOF
+
         CONF_FILE=/etc/nginx/conf.d/default.conf
 
         cat > $$CONF_FILE << EOF
@@ -235,6 +273,7 @@ services:
             location / {
                 proxy_pass http://ui:80;
             }
+
         }
         EOF
          nginx -g 'daemon off;'

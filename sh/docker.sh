@@ -28,6 +28,11 @@ docker_install() {
 
     apt update --assume-yes
     apt install --assume-yes --no-install-recommends docker-ce docker-ce-cli containerd.io docker-compose-plugin
+    cat >/etc/docker/daemon.json <<EOF
+{
+    "log-driver":"local"
+}
+EOF
     info "installed docker"
 }
 docker_bridge_create() {
@@ -35,7 +40,8 @@ docker_bridge_create() {
     [ -z "$name" ] && fatal "docker_bridge_create needs argument"
     info "used host ips are  $(host_networks)"
     info "used host routings are $(host_routings)"
-    info "please select a non conflict network, from 10.0.0.0/16 ... 10.255.0.0/16 or 172.17.0.0/16 ... 172.31.0.0/16"
+    info "please select a non conflict docker network, from these ranges 10.0.0.0/16 ... 10.255.0.0/16 or 172.17.0.0/16 ... 172.31.0.0/16"
+    info "you can select 10.10.10.0/24, if it does not conflict with your network or 172.31.30.0/24"
     local cidr=$(read_cidr)
     local gateway=$(ipcalc -b $cidr | grep HostMin | cut -d ':' -f 2 | tr -d ' ')
     docker network create --driver bridge --subnet=$cidr \

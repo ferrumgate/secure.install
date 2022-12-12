@@ -96,16 +96,37 @@ download_and_verify() {
 
 print_usage() {
     echo "usage"
-    echo "  ./install.sh -h (--help)        -> prints help"
-    echo "  ./install.sh -d (--docker)      -> install with docker"
-    echo "  ./install.sh -s (--docker-swarm)-> install with docker-swarm"
+    echo "  ./install.sh [ -h | --help ]          -> prints help"
+    echo "  ./install.sh [ -d | --docker ]        -> install with docker"
+    echo "  ./install.sh [ -s | --docker-swarm ]  -> install with docker-swarm"
+
+}
+
+install_services() {
+    cat >/etc/systemd/system/ferrumgate.service <<EOF
+[Unit]
+Description=%i service with docker compose
+PartOf=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+WorkingDirectory=/etc/ferrumgate
+ExecStart=docker compose -f ferrumgate.docker.yaml up -d --remove-orphans
+ExecStop=docker compose -f ferrumgate.docker.yaml down
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    systemctl enable ferrumgate
 
 }
 
 main() {
     # install type
     local INSTALL="docker"
-
     ARGS=$(getopt -o 'hds' --long 'help,docker,docker-swarm' -- "$@") || exit
     eval "set -- $ARGS"
     local HELP=1
@@ -152,13 +173,13 @@ main() {
     . ./sh/docker.sh
 
     if [ "$INSTALL" = "docker" ]; then
-        #prerequities
-        #docker_install
-        #docker_network_bridge_configure ferrum
+        prerequities
+        docker_install
+        docker_network_bridge_configure ferrum
 
         # prepare folder permission to only root
         chmod -R 600 $(pwd)
-        DOCKER_FILE=ferrum.docker-compose.yaml
+        DOCKER_FILE=docker.yaml
         cp $DOCKER_FILE compose.yaml
         DOCKER_FILE=compose.yaml
 
@@ -199,9 +220,21 @@ main() {
         info "configuring log level"
         sed -i "s/??LOG_LEVEL/$LOG_LEVEL/g" $DOCKER_FILE
 
-        docker compose -f $DOCKER_FILE down
-        docker compose -f $DOCKER_FILE pull
-        docker compose -f $DOCKER_FILE -p ferrumgate up -d --remove-orphans
+        mkdir -p /etc/ferrumgate
+        cp -f $DOCKER_FILE /etc/ferrumgate/ferrumgate.docker.yaml
+        chmod 600 /etc/ferrumgate/ferrumgate.docker.yaml
+
+        info "installing services"
+        install_services
+
+        info "copy script files"
+        cp sh/run/ferrumgate.sh /usr/local/bin/ferrumgate
+        chmod +x /usr/local/bin/ferrumgate
+
+        #docker compose -f $DOCKER_FILE down
+        #docker compose -f $DOCKER_FILE pull
+        #docker compose -f $DOCKER_FILE -p ferrumgate up -d --remove-orphans
+        info "system is ready"
 
     fi
 }
