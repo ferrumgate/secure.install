@@ -146,7 +146,7 @@ services:
       - LOG_LEVEL=??LOG_LEVEL
     depends_on:
       - redis
-      - server
+      - server-ssh
     deploy:
       mode: global
       restart_policy:
@@ -189,7 +189,7 @@ services:
       - LOG_LEVEL=??LOG_LEVEL
     depends_on:
       - redis
-      - server
+      - server-ssh
     deploy:
       mode: global
       restart_policy:
