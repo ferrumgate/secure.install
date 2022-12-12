@@ -82,14 +82,14 @@ uninstall() {
         systemctl stop ferrumgate
         systemctl disable ferrumgate
         ## force
-        docker ps | grep ferrumgate | tr -s ' ' | cut -d' ' -f 1 | xargs docker stop
+        docker ps | grep ferrumgate | tr -s ' ' | cut -d' ' -f 1 | xargs -r docker stop
         ## rm service
         rm /etc/systemd/system/ferrumgate.service
         ## rm folder
         rm -rf /etc/ferrumgate
         ## rm docker related
-        docker network ls | grep ferrum | tr -s ' ' | cut -d' ' -f2 | xargs docker network rm
-        docker volume ls | grep ferrumgate | tr -s ' ' | cut -d' ' -f2 | xargs docker volume rm
+        docker network ls | grep ferrum | tr -s ' ' | cut -d' ' -f2 | xargs -r docker network rm
+        docker volume ls | grep ferrumgate | tr -s ' ' | cut -d' ' -f2 | xargs -r docker volume rm
         ## rm this file
         rm /usr/local/bin/ferrumgate
         info "uninstall finished successfully"
