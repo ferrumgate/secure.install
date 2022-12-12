@@ -84,7 +84,7 @@ download() {
         curl -o $1 -sfL $2
         ;;
     wget)
-        wget -qO $1 $2
+        wget -qNO $1 $2
         ;;
     *)
         fatal "Incorrect executable '$DOWNLOADER'"

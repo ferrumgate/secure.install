@@ -155,7 +155,7 @@ services:
       - ferrum:/etc/ferrumgate
       - /etc/docker:/etc/docker
       - /var/run/docker.sock:/var/run/docker.sock
-    network_mode: service:server
+    network_mode: service:server-ssh
     logging:
       driver: local
 
