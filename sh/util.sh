@@ -4,7 +4,7 @@ read_cidr() {
 
     while true; do
 
-        read -p "enter cidr like (10.9.0.0/16):" network
+        read -p "enter cidr like (10.9.0.0/24):" network
         ipcalc -n "$network" | grep -q "INVALID" && result=$? || result=$?
         if [ $result -eq 0 ]; then
             error "invalid address"
