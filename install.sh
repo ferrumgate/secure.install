@@ -145,7 +145,7 @@ ensure_root() {
 create_certificates() {
     domain=secure.ferrumgate.local
     tmpFolder=/tmp
-    openssl req -x509 -nodes -days 3650 -newkey rsa:2048 -keyout ${tmpFolder}/${domain}.key -out ${tmpFolder}/${domain}.crt -subj "/CN=${domain}/O=${domain}"
+    openssl req -x509 -nodes -days 3650 -newkey rsa:2048 -keyout ${tmpFolder}/${domain}.key -out ${tmpFolder}/${domain}.crt -subj "/CN=${domain}/O=${domain}" 2>/dev/null
     echo ${tmpFolder}/${domain}
 }
 
