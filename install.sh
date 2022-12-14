@@ -144,9 +144,8 @@ ensure_root() {
 }
 create_certificates() {
     domain=secure.ferrumgate.local
-    tmpFolder=/tmp
-    openssl req -x509 -nodes -days 3650 -newkey rsa:2048 -keyout ${tmpFolder}/${domain}.key -out ${tmpFolder}/${domain}.crt -subj "/CN=${domain}/O=${domain}" 2>/dev/null
-    echo ${tmpFolder}/${domain}
+    openssl req -x509 -nodes -days 3650 -newkey rsa:2048 -keyout ${domain}.key -out ${domain}.crt -subj "/CN=${domain}/O=${domain}" 2>/dev/null
+    echo ${domain}
 }
 
 main() {
@@ -225,6 +224,7 @@ main() {
 
         SSL_PUB=$(cat ${SSL_FILE}.crt | base64 -w 0)
         SSL_KEY=$(cat ${SSL_FILE}.key | base64 -w 0)
+        rm ${SSL_FILE}.crt && rm ${SSL_FILE}.key
 
         if [ $ENV_FOR != "PROD" ]; then
             GATEWAY_ID=4s6ro4xte8009p96
