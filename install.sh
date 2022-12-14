@@ -142,6 +142,12 @@ ensure_root() {
     fi
 
 }
+create_certificates() {
+    domain=secure.ferrumgate.local
+    tmpFolder=/tmp
+    openssl req -x509 -nodes -days 3650 -newkey rsa:2048 -keyout ${tmpFolder}/${domain}.key -out ${tmpFolder}/${domain}.crt -subj "/CN=${domain}/O=${domain}"
+    echo ${tmpFolder}/${domain}
+}
 
 main() {
     ensure_root
@@ -215,6 +221,11 @@ main() {
         REDIS_PASS=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 64 | head -n 1)
         ES_PASS=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 64 | head -n 1)
         ENCRYPT_KEY=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 32 | head -n 1)
+        SSL_FILE=$(create_certificates)
+
+        SSL_PUB=$(cat ${SSL_FILE}.crt | base64 -w 0)
+        SSL_KEY=$(cat ${SSL_FILE}.key | base64 -w 0)
+
         if [ $ENV_FOR != "PROD" ]; then
             GATEWAY_ID=4s6ro4xte8009p96
             REDIS_PASS=1dpkz8g8xg6e8tfz3tv1usddjhcu1m81pjcp2ai9je08zlop73t64eis6y0thxlv
@@ -239,6 +250,10 @@ main() {
 
         info "configuring log level"
         sed -i "s/??LOG_LEVEL/$LOG_LEVEL/g" $DOCKER_FILE
+
+        info "configuring ssl certificates"
+        sed -i "s/??SSL_PUB/$SSL_PUB/g" $DOCKER_FILE
+        sed -i "s/??SSL_KEY/$SSL_KEY/g" $DOCKER_FILE
 
         mkdir -p /etc/ferrumgate
         cp -f $DOCKER_FILE /etc/ferrumgate/ferrumgate.docker.yaml
