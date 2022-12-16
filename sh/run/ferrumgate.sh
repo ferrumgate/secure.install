@@ -66,6 +66,7 @@ start_service() {
 }
 stop_service() {
     systemctl stop ferrumgate
+    docker ps | grep ferrumgate | tr -s ' ' | cut -d' ' -f 1 | xargs -r docker stop
     info "ferrumgate stopped"
     info "for more execute docker ps"
 
