@@ -129,7 +129,7 @@ services:
       driver: local
 
   admin:
-    image: "??PRIVATE_REGISTRY/ferrumgate/job.admin:1.0.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.admin:1.1.0"
     restart: always
     privileged: true
     #cap_add:
@@ -160,7 +160,7 @@ services:
       driver: local
 
   ui:
-    image: "??PRIVATE_REGISTRY/ferrumgate/ui.portal:1.0.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/ui.portal:1.1.0"
     restart: always
     deploy:
       mode: global
@@ -172,7 +172,7 @@ services:
       driver: local
 
   rest:
-    image: "??PRIVATE_REGISTRY/ferrumgate/rest.portal:1.0.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/rest.portal:1.1.0"
     restart: always
     environment:
       - PORT=8181
@@ -201,6 +201,29 @@ services:
     logging:
       driver: local
 
+  log:
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.log:1.0.0"
+    restart: always
+    environment:
+      - REDIS_HOST=redis:6379
+      - REDIS_PASS=??REDIS_PASS
+      - ENCRYPT_KEY=??ENCRYPT_KEY
+      - ES_HOST=http://es:9200
+      - ES_USER=elastic
+      - ES_PASS=??ES_PASS
+      - GATEWAY_ID=??GATEWAY_ID
+      - LOG_LEVEL=??LOG_LEVEL
+    depends_on:
+      - redis
+    deploy:
+      mode: global
+      restart_policy:
+        delay: 5s
+    networks:
+      - ferrum
+    logging:
+      driver: local
+
   nginx:
     image: nginx:1.23-alpine
     restart: always
@@ -221,7 +244,7 @@ services:
         user  nginx;
         worker_processes  auto;
 
-        error_log  /var/log/nginx/error.log notice;
+        error_log  /dev/stdout notice;
         pid        /var/run/nginx.pid;
 
 
@@ -238,7 +261,7 @@ services:
                               '\$$status \$$body_bytes_sent "\$$http_referer" '
                               '"\$$http_user_agent" "\$$http_x_forwarded_for"';
 
-            access_log  /var/log/nginx/access.log  main;
+            access_log  /dev/stdout  main;
             server_tokens off;
             sendfile        on;
             #tcp_nopush     on;

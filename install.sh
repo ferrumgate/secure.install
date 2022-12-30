@@ -148,6 +148,8 @@ create_certificates() {
     echo ${domain}
 }
 
+VERSION=1.1.0
+
 main() {
     ensure_root
     # install type
@@ -189,7 +191,7 @@ main() {
     setup_verify_arch
 
     info "download install scripts from github"
-    download_and_verify
+    #download_and_verify
 
     # after download add other scripts
     . ./sh/common.sh
@@ -198,9 +200,10 @@ main() {
     . ./sh/docker.sh
 
     if [ "$INSTALL" = "docker" ]; then
-        prerequities
-        docker_install
-        docker_network_bridge_configure ferrum
+
+        #prerequities
+        #docker_install
+        #docker_network_bridge_configure ferrum
 
         # prepare folder permission to only root
         chmod -R 600 $(pwd)
@@ -263,12 +266,15 @@ main() {
         install_services
 
         info "copy script files"
+        sed -i "s/??VERSION/$VERSION/g" sh/run/ferrumgate.sh
         cp sh/run/ferrumgate.sh /usr/local/bin/ferrumgate
         chmod +x /usr/local/bin/ferrumgate
 
-        #docker compose -f $DOCKER_FILE down
-        #docker compose -f $DOCKER_FILE pull
-        #docker compose -f $DOCKER_FILE -p ferrumgate up -d --remove-orphans
+        if [ $ENV_FOR != "PROD" ]; then
+            docker compose -f $DOCKER_FILE down
+            docker compose -f $DOCKER_FILE pull
+            docker compose -f $DOCKER_FILE -p ferrumgate up -d --remove-orphans
+        fi
         info "system is ready"
 
     fi
