@@ -1,6 +1,6 @@
-# secure.install
+# About
 
-Zero trust application access system installation scripts for
+FerrumGate Zero trust access installation scripts for
 
 - docker
 - docker-swarm
@@ -14,12 +14,6 @@ Zero trust application access system installation scripts for
 
 > ./install.sh --docker-swarm
 
-#### Debugging
+### Installation
 
-run a network tools container with below command in target container namespace
-
-> docker run --rm -it --net container:$CID --privileged nicolaka/netshoot
-
-### random number
-
-cat /dev/urandom | tr -dc '[:alnum:]' | fold -w ${1:-32} | head -n 1
+<https://ferrumgate.com/docs/getting-started/install/>

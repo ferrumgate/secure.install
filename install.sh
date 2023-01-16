@@ -94,14 +94,15 @@ download() {
     # Abort if download command failed
     [ $? -eq 0 ] || fatal 'Download failed'
 }
-
+VERSION=1.1.0
 download_and_verify() {
     [ "$ENV_FOR" != "PROD" ] && return 0
     verify_downloader curl || verify_downloader wget || fatal 'can not find curl or wget for downloading files'
     verify_command unzip || fatal "can not find unzip command"
-    download install.zip https://github.com/ferrumgate/secure.install/archive/refs/heads/master.zip
+    ## download version
+    download install.zip https://github.com/ferrumgate/secure.install/archive/refs/tags/v$VERSION.zip
     unzip install.zip
-    mv secure.install-master secure.install
+    mv secure.install-$VERSION secure.install
     cd secure.install
 }
 
@@ -198,6 +199,7 @@ main() {
     . ./sh/docker.sh
 
     if [ "$INSTALL" = "docker" ]; then
+
         prerequities
         docker_install
         docker_network_bridge_configure ferrum
@@ -263,12 +265,15 @@ main() {
         install_services
 
         info "copy script files"
+        sed -i "s/??VERSION/$VERSION/g" sh/run/ferrumgate.sh
         cp sh/run/ferrumgate.sh /usr/local/bin/ferrumgate
         chmod +x /usr/local/bin/ferrumgate
 
-        #docker compose -f $DOCKER_FILE down
-        #docker compose -f $DOCKER_FILE pull
-        #docker compose -f $DOCKER_FILE -p ferrumgate up -d --remove-orphans
+        if [ $ENV_FOR != "PROD" ]; then
+            docker compose -f $DOCKER_FILE down
+            docker compose -f $DOCKER_FILE pull
+            docker compose -f $DOCKER_FILE -p ferrumgate up -d --remove-orphans
+        fi
         info "system is ready"
 
     fi

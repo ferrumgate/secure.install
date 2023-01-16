@@ -48,8 +48,11 @@ escape_dq() {
     printf '%s' "$@" | sed -e 's/"/\\"/g'
 }
 
+VERSION=??VERSION
+
 print_usage() {
-    echo "usage"
+    echo "usage:"
+    echo "version: ${VERSION}"
     echo "  ferrumgate [ -h | --help ]        -> prints help"
     echo "  ferrumgate [ -s | --start ]       -> start service"
     echo "  ferrumgate [ -x | --stop ]        -> stop service"
