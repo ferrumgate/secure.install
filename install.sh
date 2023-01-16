@@ -100,9 +100,7 @@ download_and_verify() {
     verify_downloader curl || verify_downloader wget || fatal 'can not find curl or wget for downloading files'
     verify_command unzip || fatal "can not find unzip command"
     ## download version
-    download version.txt https://raw.githubusercontent.com/ferrumgate/secure.install/master/version.txt
-
-    download install.zip https://github.com/ferrumgate/secure.install/archive/refs/tags/$VERSION.zip
+    download install.zip https://github.com/ferrumgate/secure.install/archive/refs/tags/v$VERSION.zip
     unzip install.zip
     mv secure.install-$VERSION secure.install
     cd secure.install
@@ -192,7 +190,7 @@ main() {
     setup_verify_arch
 
     info "download install scripts from github"
-    #download_and_verify
+    download_and_verify
 
     # after download add other scripts
     . ./sh/common.sh
