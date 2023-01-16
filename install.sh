@@ -94,14 +94,17 @@ download() {
     # Abort if download command failed
     [ $? -eq 0 ] || fatal 'Download failed'
 }
-
+VERSION=1.1.0
 download_and_verify() {
     [ "$ENV_FOR" != "PROD" ] && return 0
     verify_downloader curl || verify_downloader wget || fatal 'can not find curl or wget for downloading files'
     verify_command unzip || fatal "can not find unzip command"
-    download install.zip https://github.com/ferrumgate/secure.install/archive/refs/heads/master.zip
+    ## download version
+    download version.txt https://raw.githubusercontent.com/ferrumgate/secure.install/master/version.txt
+
+    download install.zip https://github.com/ferrumgate/secure.install/archive/refs/tags/$VERSION.zip
     unzip install.zip
-    mv secure.install-master secure.install
+    mv secure.install-$VERSION secure.install
     cd secure.install
 }
 
@@ -147,8 +150,6 @@ create_certificates() {
     openssl req -x509 -nodes -days 3650 -newkey rsa:2048 -keyout ${domain}.key -out ${domain}.crt -subj "/CN=${domain}/O=${domain}" 2>/dev/null
     echo ${domain}
 }
-
-VERSION=1.1.0
 
 main() {
     ensure_root
@@ -201,9 +202,9 @@ main() {
 
     if [ "$INSTALL" = "docker" ]; then
 
-        #prerequities
-        #docker_install
-        #docker_network_bridge_configure ferrum
+        prerequities
+        docker_install
+        docker_network_bridge_configure ferrum
 
         # prepare folder permission to only root
         chmod -R 600 $(pwd)
