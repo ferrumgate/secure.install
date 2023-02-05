@@ -94,7 +94,7 @@ download() {
     # Abort if download command failed
     [ $? -eq 0 ] || fatal 'Download failed'
 }
-VERSION=1.1.0
+VERSION=1.2.0
 download_and_verify() {
     [ "$ENV_FOR" != "PROD" ] && return 0
     verify_downloader curl || verify_downloader wget || fatal 'can not find curl or wget for downloading files'
@@ -144,7 +144,7 @@ ensure_root() {
 
 }
 create_certificates() {
-    domain=secure.ferrumgate.local
+    domain=secure.ferrumgate.zero
     openssl req -x509 -nodes -days 3650 -newkey rsa:2048 -keyout ${domain}.key -out ${domain}.crt -subj "/CN=${domain}/O=${domain}" 2>/dev/null
     echo ${domain}
 }
@@ -200,9 +200,11 @@ main() {
 
     if [ "$INSTALL" = "docker" ]; then
 
-        prerequities
-        docker_install
-        docker_network_bridge_configure ferrum
+        if [ $ENV_FOR == "PROD" ]; then
+            prerequities
+            docker_install
+            docker_network_bridge_configure ferrum
+        fi
 
         # prepare folder permission to only root
         chmod -R 600 $(pwd)
@@ -212,7 +214,7 @@ main() {
 
         if [ $ENV_FOR != "PROD" ]; then # for test use local private registry
 
-            sed -i 's#??PRIVATE_REGISTRY/#registry.ferrumgate.local/#g' $DOCKER_FILE
+            sed -i 's#??PRIVATE_REGISTRY/#registry.ferrumgate.zero/#g' $DOCKER_FILE
         else
             sed -i 's#??PRIVATE_REGISTRY/##g' $DOCKER_FILE
 

@@ -9,9 +9,7 @@ volumes:
   ferrum:
   lmdb:
 
-
 services:
-
   prepare:
     image: alpine:3.17
     command:
@@ -104,7 +102,7 @@ services:
     image: "??PRIVATE_REGISTRY/ferrumgate/secure.server.ssh:1.0.0"
     restart: always
     ports:
-      - '9999:9999'
+      - "9999:9999"
     environment:
       - REDIS_HOST=redis#6379
       - REDIS_PASS=??REDIS_PASS
@@ -115,7 +113,7 @@ services:
     depends_on:
       - redis
     extra_hosts:
-      - "registry.ferrumgate.local:192.168.88.40"
+      - "registry.ferrumgate.zero:192.168.88.40"
     deploy:
       mode: global
       restart_policy:
@@ -130,7 +128,7 @@ services:
       driver: local
 
   admin:
-    image: "??PRIVATE_REGISTRY/ferrumgate/job.admin:1.1.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.admin:1.2.0"
     restart: always
     privileged: true
     #cap_add:
@@ -163,7 +161,7 @@ services:
       driver: local
 
   ui:
-    image: "??PRIVATE_REGISTRY/ferrumgate/ui.portal:1.1.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/ui.portal:1.2.0"
     restart: always
     deploy:
       mode: global
@@ -175,7 +173,7 @@ services:
       driver: local
 
   rest:
-    image: "??PRIVATE_REGISTRY/ferrumgate/rest.portal:1.1.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/rest.portal:1.2.0"
     restart: always
     environment:
       - PORT=8181
@@ -205,7 +203,7 @@ services:
       driver: local
 
   log:
-    image: "??PRIVATE_REGISTRY/ferrumgate/job.log:1.0.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.log:1.1.0"
     restart: always
     environment:
       - REDIS_HOST=redis:6379
@@ -243,8 +241,8 @@ services:
       - |
         SSL_PUB=??SSL_PUB
         SSL_KEY=??SSL_KEY
-        echo $$SSL_PUB|base64 -d > /etc/ssl/secure.ferrumgate.local.crt
-        echo $$SSL_KEY|base64 -d > /etc/ssl/secure.ferrumgate.local.key
+        echo $$SSL_PUB|base64 -d > /etc/ssl/secure.ferrumgate.zero.crt
+        echo $$SSL_KEY|base64 -d > /etc/ssl/secure.ferrumgate.zero.key
         CONF_FILE=/etc/nginx/nginx.conf
 
         cat > $$CONF_FILE << EOF
@@ -311,9 +309,9 @@ services:
         }
         server {
             listen       443 ssl;
-            server_name  secure.ferrumgate.local;
-            ssl_certificate     /etc/ssl/secure.ferrumgate.local.crt;
-            ssl_certificate_key /etc/ssl/secure.ferrumgate.local.key;
+            server_name  secure.ferrumgate.zero;
+            ssl_certificate     /etc/ssl/secure.ferrumgate.zero.crt;
+            ssl_certificate_key /etc/ssl/secure.ferrumgate.zero.key;
             ssl_protocols       TLSv1 TLSv1.1 TLSv1.2;
             ssl_ciphers         HIGH:!aNULL:!MD5;
 
