@@ -21,21 +21,21 @@ fatal() {
 }
 
 ENV_FOR=${ENV_FOR:="PROD"}
-URL="https://raw.githubusercontent.com/ferrumgate/secure.install/master"
+#URL="https://raw.githubusercontent.com/ferrumgate/secure.install/master"
 
 #### ensures $URL is empty or begins with https://, exiting fatally otherwise
-verify_install_url() {
-    URL=$0
-    case "${URL}" in
-    "") ;;
-
-    https://*) ;;
-
-    *)
-        fatal "Only https:// URLs are supported "
-        ;;
-    esac
-}
+#verify_install_url() {
+#    URL=$0
+#    case "${URL}" in
+#    "") ;;
+#
+#    https://*) ;;
+#
+#    *)
+#        fatal "Only https:// URLs are supported "
+#        ;;
+#    esac
+#}
 
 #### set arch and suffix, fatal if architecture not supported
 setup_verify_arch() {
