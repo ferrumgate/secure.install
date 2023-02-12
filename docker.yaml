@@ -139,7 +139,7 @@ services:
       - REDIS_PASS=??REDIS_PASS
       - REDIS_SLAVE_HOST=redis:6379
       - REDIS_SLAVE_PASS=??REDIS_PASS
-      - FERRUM_IO_IMAGE=??PRIVATE_REGISTRY/ferrumgate/ferrum.io:1.1.0
+      - FERRUM_IO_IMAGE=??PRIVATE_REGISTRY/ferrumgate/ferrum.io:1.2.0
       - ENCRYPT_KEY=??ENCRYPT_KEY
       - GATEWAY_ID=??GATEWAY_ID
       - LOG_LEVEL=??LOG_LEVEL
