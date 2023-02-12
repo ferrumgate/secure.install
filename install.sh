@@ -200,7 +200,7 @@ main() {
 
     if [ "$INSTALL" = "docker" ]; then
 
-        if [ $ENV_FOR == "PROD" ]; then
+        if [ $ENV_FOR = "PROD" ]; then
             prerequities
             docker_install
             docker_network_bridge_configure ferrum
