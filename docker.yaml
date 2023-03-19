@@ -128,7 +128,7 @@ services:
       driver: local
 
   admin:
-    image: "??PRIVATE_REGISTRY/ferrumgate/job.admin:1.3.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.admin:1.4.0"
     restart: always
     privileged: true
     #cap_add:
@@ -139,7 +139,7 @@ services:
       - REDIS_PASS=??REDIS_PASS
       - REDIS_SLAVE_HOST=redis:6379
       - REDIS_SLAVE_PASS=??REDIS_PASS
-      - FERRUM_IO_IMAGE=??PRIVATE_REGISTRY/ferrumgate/ferrum.io:1.2.0
+      - FERRUM_IO_IMAGE=??PRIVATE_REGISTRY/ferrumgate/ferrum.io:1.3.0
       - ENCRYPT_KEY=??ENCRYPT_KEY
       - GATEWAY_ID=??GATEWAY_ID
       - LOG_LEVEL=??LOG_LEVEL
@@ -161,7 +161,7 @@ services:
       driver: local
 
   ui:
-    image: "??PRIVATE_REGISTRY/ferrumgate/ui.portal:1.3.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/ui.portal:1.4.0"
     restart: always
     deploy:
       mode: global
@@ -173,7 +173,7 @@ services:
       driver: local
 
   rest:
-    image: "??PRIVATE_REGISTRY/ferrumgate/rest.portal:1.3.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/rest.portal:1.4.0"
     restart: always
     environment:
       - PORT=8181
@@ -203,7 +203,7 @@ services:
       driver: local
 
   log:
-    image: "??PRIVATE_REGISTRY/ferrumgate/job.log:1.2.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.log:1.3.0"
     restart: always
     environment:
       - REDIS_HOST=redis:6379
