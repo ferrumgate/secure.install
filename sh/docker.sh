@@ -34,14 +34,18 @@ docker_install() {
     #EOF
     info "installed docker"
 }
+
 docker_bridge_create() {
     local name=$1
+    local cidr=$2
     [ -z "$name" ] && fatal "docker_bridge_create needs argument"
-    info "used host ips are  $(host_networks)"
-    info "used host routings are $(host_routings)"
-    info "please select a non conflict docker network, from these ranges 10.0.0.0/16 ... 10.255.0.0/16 or 172.17.0.0/16 ... 172.31.0.0/16"
-    info "you can select 10.10.10.0/24, if it does not conflict with your network or 172.31.30.0/24"
-    local cidr=$(read_cidr)
+    if [ -z "$cidr" ]; then
+        info "used host ips are  $(host_networks)"
+        info "used host routings are $(host_routings)"
+        info "please select a non conflict docker network, from these ranges 10.0.0.0/16 ... 10.255.0.0/16 or 172.17.0.0/16 ... 172.31.0.0/16"
+        info "you can select 10.10.10.0/24, if it does not conflict with your network or 172.31.30.0/24"
+        cidr=$(read_cidr)
+    fi
     local gateway=$(ipcalc -b $cidr | grep HostMin | cut -d ':' -f 2 | tr -d ' ')
     docker network create --driver bridge --subnet=$cidr \
         --gateway=$gateway --attachable $name
@@ -49,13 +53,14 @@ docker_bridge_create() {
 
 docker_network_bridge_configure() {
     local name=$1
+    local cidr=$2
     [ -z "$name" ] && fatal "docker_network_bridge_configure needs argument"
     info "checking docker network $name"
     local network=$(docker network ls | grep $name)
 
     if [ -z "$network" ]; then
         info "$name network not exists"
-        docker_bridge_create $name
+        docker_bridge_create $name $cidr
     else
 
         info "$name network exists"

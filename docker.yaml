@@ -128,7 +128,7 @@ services:
       driver: local
 
   admin:
-    image: "??PRIVATE_REGISTRY/ferrumgate/job.admin:1.5.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.admin:1.6.0"
     restart: always
     privileged: true
     #cap_add:
@@ -164,7 +164,7 @@ services:
       driver: local
 
   ui:
-    image: "??PRIVATE_REGISTRY/ferrumgate/ui.portal:1.5.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/ui.portal:1.6.0"
     restart: always
     deploy:
       mode: global
@@ -176,8 +176,11 @@ services:
       driver: local
 
   rest:
-    image: "??PRIVATE_REGISTRY/ferrumgate/rest.portal:1.5.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/rest.portal:1.6.0"
     restart: always
+    ports:
+      - 80:8181
+      - 443:8443
     environment:
       - PORT=8181
       - REDIS_HOST=redis:6379
@@ -191,13 +194,20 @@ services:
       - ES_PASS=??ES_PASS
       - GATEWAY_ID=??GATEWAY_ID
       - LOG_LEVEL=??LOG_LEVEL
+      - STATIC_FOLDER=/usr/src/app/web
+      - UI_HOST=ui:80
     depends_on:
       - redis
       - server-ssh
     deploy:
-      mode: global
       restart_policy:
         delay: 5s
+      mode: replicated
+      replicas: 1
+      placement:
+        max_replicas_per_node: 1
+        constraints:
+          - "node.role==manager"
     volumes:
       - ferrum:/etc/ferrumgate
     networks:
@@ -206,7 +216,7 @@ services:
       driver: local
 
   log:
-    image: "??PRIVATE_REGISTRY/ferrumgate/job.log:1.4.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.log:1.5.0"
     restart: always
     environment:
       - REDIS_HOST=redis:6379
@@ -233,7 +243,7 @@ services:
       driver: local
 
   task:
-    image: "??PRIVATE_REGISTRY/ferrumgate/job.task:1.0.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.task:1.1.0"
     restart: always
     environment:
       - REDIS_HOST=redis:6379
@@ -255,126 +265,4 @@ services:
     logging:
       driver: local
 
-  nginx:
-    image: nginx:1.23-alpine
-    restart: always
-    ports:
-      - 80:80
-      - 443:443
-    command:
-      - /bin/sh
-      - -c
-      - |
-        SSL_PUB=??SSL_PUB
-        SSL_KEY=??SSL_KEY
-        echo $$SSL_PUB|base64 -d > /etc/ssl/secure.ferrumgate.zero.crt
-        echo $$SSL_KEY|base64 -d > /etc/ssl/secure.ferrumgate.zero.key
-        CONF_FILE=/etc/nginx/nginx.conf
-
-        cat > $$CONF_FILE << EOF
-        user  nginx;
-        worker_processes  auto;
-
-        error_log  /dev/stdout notice;
-        pid        /var/run/nginx.pid;
-
-
-        events {
-            worker_connections  1024;
-        }
-
-
-        http {
-            include       /etc/nginx/mime.types;
-            default_type  application/octet-stream;
-
-            log_format  main  '\$$remote_addr - \$$remote_user [\$$time_local] "\$$request" '
-                              '\$$status \$$body_bytes_sent "\$$http_referer" '
-                              '"\$$http_user_agent" "\$$http_x_forwarded_for"';
-
-            access_log  /dev/stdout  main;
-            server_tokens off;
-            sendfile        on;
-            #tcp_nopush     on;
-
-            keepalive_timeout  65;
-
-            #gzip  on;
-
-            include /etc/nginx/conf.d/*.conf;
-        }
-        EOF
-
-        CONF_FILE=/etc/nginx/conf.d/default.conf
-
-        cat > $$CONF_FILE << EOF
-        server {
-            listen       80;
-            server_name  localhost;
-
-            proxy_http_version 1.1;
-            proxy_cache_bypass  \$$http_upgrade;
-            proxy_set_header Upgrade           \$$http_upgrade;
-            proxy_set_header Connection        "upgrade";
-            proxy_set_header Host              \$$host;
-            proxy_set_header X-Real-IP         \$$remote_addr;
-            proxy_set_header X-Forwarded-For   \$$proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto \$$scheme;
-            proxy_set_header X-Forwarded-Host  \$$host;
-            proxy_set_header X-Forwarded-Port  \$$server_port;
-
-            location ^~/api {
-                proxy_pass http://rest:8181;
-                
-            }
-            
-            location / {
-                proxy_pass http://ui:80;
-            }
-
-        }
-        server {
-            listen       443 ssl;
-            server_name  secure.ferrumgate.zero;
-            ssl_certificate     /etc/ssl/secure.ferrumgate.zero.crt;
-            ssl_certificate_key /etc/ssl/secure.ferrumgate.zero.key;
-            ssl_protocols       TLSv1 TLSv1.1 TLSv1.2;
-            ssl_ciphers         HIGH:!aNULL:!MD5;
-
-            proxy_http_version 1.1;
-            proxy_cache_bypass  \$$http_upgrade;
-            proxy_set_header Upgrade           \$$http_upgrade;
-            proxy_set_header Connection        "upgrade";
-            proxy_set_header Host              \$$host;
-            proxy_set_header X-Real-IP         \$$remote_addr;
-            proxy_set_header X-Forwarded-For   \$$proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto \$$scheme;
-            proxy_set_header X-Forwarded-Host  \$$host;
-            proxy_set_header X-Forwarded-Port  \$$server_port;
-
-            location ^~/api {
-                proxy_pass http://rest:8181;
-                
-            }
-            
-            location / {
-                proxy_pass http://ui:80;
-            }
-
-        }
-        EOF
-         nginx -g 'daemon off;'
-    deploy:
-      mode: replicated
-      replicas: 1
-      placement:
-        max_replicas_per_node: 1
-        constraints:
-          - "node.role==manager"
-    depends_on:
-      - rest
-      - ui
-    networks:
-      - ferrum
-    logging:
-      driver: local
+ 
