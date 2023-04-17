@@ -94,7 +94,7 @@ download() {
     # Abort if download command failed
     [ $? -eq 0 ] || fatal 'Download failed'
 }
-VERSION=1.5.0
+VERSION=1.6.0
 download_and_verify() {
     [ "$ENV_FOR" != "PROD" ] && return 0
     verify_downloader curl || verify_downloader wget || fatal 'can not find curl or wget for downloading files'
@@ -110,6 +110,7 @@ print_usage() {
     echo "usage"
     echo "  ./install.sh [ -h | --help ]          -> prints help"
     echo "  ./install.sh [ -d | --docker ]        -> install with docker"
+    echo "  ./install.sh [ -b| --bridge-network 10.9.0.0/24 ] -> docker bridge network"
     echo "  ./install.sh [ -s | --docker-swarm ]  -> install with docker-swarm"
 
 }
@@ -153,7 +154,8 @@ main() {
     ensure_root
     # install type
     local INSTALL="docker"
-    ARGS=$(getopt -o 'hds' --long 'help,docker,docker-swarm' -- "$@") || exit
+    local BRIDGE_NETWORK="10.9.0.0/24"
+    ARGS=$(getopt -o 'hdsb:' --long 'help,docker,docker-swarm,bridge-network:' -- "$@") || exit
     eval "set -- $ARGS"
     local HELP=1
     while true; do
@@ -171,6 +173,11 @@ main() {
         -s | --docker-swarm)
             INSTALL="docker-swarm"
             shift
+            break
+            ;;
+        -b | --bridge-network)
+            BRIDGE_NETWORK="$2"
+            shift 2
             break
             ;;
         --)
@@ -203,7 +210,7 @@ main() {
         if [ $ENV_FOR = "PROD" ]; then
             prerequities
             docker_install
-            docker_network_bridge_configure ferrum
+            docker_network_bridge_configure ferrum $BRIDGE_NETWORK
         fi
 
         # prepare folder permission to only root
