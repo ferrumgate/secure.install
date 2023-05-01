@@ -94,7 +94,7 @@ download() {
     # Abort if download command failed
     [ $? -eq 0 ] || fatal 'Download failed'
 }
-VERSION=1.6.0
+VERSION=1.7.0
 download_and_verify() {
     [ "$ENV_FOR" != "PROD" ] && return 0
     verify_downloader curl || verify_downloader wget || fatal 'can not find curl or wget for downloading files'
