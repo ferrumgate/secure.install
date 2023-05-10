@@ -86,7 +86,7 @@ services:
           - "node.role==manager"
       restart_policy:
         delay: 5s
-    mem_limit: 1073741824
+    mem_limit: 2073741824
     ulimits:
       memlock:
         soft: -1
