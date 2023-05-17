@@ -247,29 +247,50 @@ main() {
         fi
         # set gateway id
         info "configuring gateway id"
-        sed -i "s/??GATEWAY_ID/$GATEWAY_ID/g" $DOCKER_FILE
+        #sed -i "s/??GATEWAY_ID/$GATEWAY_ID/g" $DOCKER_FILE
 
         # set redis password
         info "configuring redis password"
-        sed -i "s/??REDIS_PASS/$REDIS_PASS/g" $DOCKER_FILE
-        sed -i "s/??REDIS_LOCAL_PASS/$REDIS_PASS/g" $DOCKER_FILE
+        #sed -i "s/??REDIS_PASS/$REDIS_PASS/g" $DOCKER_FILE
+        #sed -i "s/??REDIS_LOCAL_PASS/$REDIS_PASS/g" $DOCKER_FILE
 
         info "configuring enc key"
-        sed -i "s/??ENCRYPT_KEY/$ENCRYPT_KEY/g" $DOCKER_FILE
+        #sed -i "s/??ENCRYPT_KEY/$ENCRYPT_KEY/g" $DOCKER_FILE
 
         info "configuring es password"
-        sed -i "s/??ES_PASS/$ES_PASS/g" $DOCKER_FILE
+        #sed -i "s/??ES_PASS/$ES_PASS/g" $DOCKER_FILE
 
         info "configuring log level"
-        sed -i "s/??LOG_LEVEL/$LOG_LEVEL/g" $DOCKER_FILE
+        #sed -i "s/??LOG_LEVEL/$LOG_LEVEL/g" $DOCKER_FILE
 
         info "configuring ssl certificates"
-        sed -i "s/??SSL_PUB/$SSL_PUB/g" $DOCKER_FILE
-        sed -i "s/??SSL_KEY/$SSL_KEY/g" $DOCKER_FILE
+        #sed -i "s/??SSL_PUB/$SSL_PUB/g" $DOCKER_FILE
+        #sed -i "s/??SSL_KEY/$SSL_KEY/g" $DOCKER_FILE
 
         mkdir -p /etc/ferrumgate
+        ENV_FILE=/etc/ferrumgate/ferrumgate.env
+        cat >$ENV_FILE <<EOF
+MODE=single
+GATEWAY_ID=$GATEWAY_ID
+REDIS_HOST=redis:6379
+REDIS_HOST_SSH=redis#6379
+REDIS_PASS=$REDIS_PASS
+REDIS_LOCAL_HOST=redis-local:6379
+REDIS_LOCAL_PASS=$REDIS_PASS
+ENCRYPT_KEY=$ENCRYPT_KEY
+ES_HOST=http://es:9200
+ES_USER=elastic
+ES_PASS=$ES_PASS
+ES_PASS_ORG=$ESPASS
+LOG_LEVEL=$LOG_LEVEL
+REST_HTTP_PORT=80
+REST_HTTPS_PORT=443
+SSH_PORT=9999
+EOF
+
         cp -f $DOCKER_FILE /etc/ferrumgate/ferrumgate.docker.yaml
         chmod 600 /etc/ferrumgate/ferrumgate.docker.yaml
+        chmod 600 $ENV_FILE
 
         info "installing services"
         install_services
@@ -282,7 +303,7 @@ main() {
         if [ $ENV_FOR != "PROD" ]; then
             docker compose -f $DOCKER_FILE down
             docker compose -f $DOCKER_FILE pull
-            docker compose -f $DOCKER_FILE --profile single -p ferrumgate up -d --remove-orphans
+            docker compose -f $DOCKER_FILE --env-file $ENV_FILE --profile single -p ferrumgate-${GATEWAY_ID} up -d --remove-orphans
         fi
         info "system is ready"
 

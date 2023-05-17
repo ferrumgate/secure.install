@@ -1,7 +1,6 @@
 #!/bin/sh
 TRUE=0
 FALSE=1
-MODE="single"
 
 ### log functions
 
@@ -83,18 +82,28 @@ status_service() {
     systemctl status ferrumgate
     info "for more execute docker ps"
 }
+
 WORKDIR=/etc/ferrumgate
 
+get_mode() {
+    mode=$(cat $WORKDIR/ferrumgate.env | grep MODE= | cut -d'=' -f2)
+    echo $mode
+}
+
 start_gateways() {
-    docker compose -f $WORKDIR/ferrumgate.docker.yaml --profile $MODE up -d --remove-orphans
+    mode=$(get_mode)
+    docker compose -f $WORKDIR/ferrumgate.docker.yaml --profile $mode up -d --remove-orphans
 }
+
 stop_gateways() {
-    docker compose -f $WORKDIR/ferrumgate.docker.yaml --profile $MODE down
+    mode=$(get_mode)
+    docker compose -f $WORKDIR/ferrumgate.docker.yaml --profile $mode down
 }
+
 SCRIPT=/usr/local/bin/ferrumgate
 change_mode() {
-
-    info "current mode is $MODE "
+    mode=$(get_mode)
+    info "current mode is $mode "
     read -p "do you want to change [Yn] " yesno
     if [ $yesno = "Y" ]; then
         read -p "enter single or multi : " mode
