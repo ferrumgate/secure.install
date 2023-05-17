@@ -1,10 +1,12 @@
 version: "3.9"
+
 networks:
   ferrum:
     external: true
 
 volumes:
   redis:
+  redis-local:
   es:
   ferrum:
   lmdb:
@@ -12,6 +14,9 @@ volumes:
 services:
   prepare:
     image: alpine:3.17
+    labels:
+        Ferrum_Gateway_Id: "??GATEWAY_ID"
+    profiles: ["single","multi"]
     command:
       - /bin/sh
       - -c
@@ -19,7 +24,7 @@ services:
         CONF_FILE=/data/conf
         if [ ! -f $$CONF_FILE ];then
           echo "file does not exits"
-          echo "gatewayId=??GATEWAY_ID"> $$CONF_FILE
+          echo "Ferrum_Gateway_Id: "??GATEWAY_ID""> $$CONF_FILE
         fi
     networks:
       - ferrum
@@ -27,6 +32,9 @@ services:
       - ferrum:/data
   redis:
     image: redis:7-bullseye
+    labels:
+        Ferrum_Gateway_Id: "??GATEWAY_ID"
+    profiles: ["single"]
     command:
       - /bin/bash
       - -c
@@ -53,12 +61,7 @@ services:
     depends_on:
       - prepare
     deploy:
-      mode: replicated
-      replicas: 1
-      placement:
-        max_replicas_per_node: 1
-        constraints:
-          - "node.role==manager"
+      mode: global
       restart_policy:
         delay: 5s
     networks:
@@ -68,8 +71,51 @@ services:
     logging:
       driver: local
 
+  redis-local:
+    image: redis:7-bullseye
+    labels:
+        Ferrum_Gateway_Id: "??GATEWAY_ID"
+    profiles: ["single","multi"]
+    command:
+      - /bin/bash
+      - -c
+      - |
+        CONF_FILE=/data/redis.conf
+        if [ ! -f $$CONF_FILE ];then
+          echo "file does not exits"
+          cat > $$CONF_FILE << EOF
+        requirepass ??REDIS_PASS
+        protected-mode yes
+        daemonize no
+        tcp-backlog 511
+        timeout 0
+        tcp-keepalive 300
+        maxclients 100000
+        appendonly yes
+        dir /data
+        EOF
+        else
+          echo "conf file exists"
+        fi
+        redis-server $$CONF_FILE
+    restart: always
+    depends_on:
+      - prepare
+    deploy:
+      mode: global
+      restart_policy:
+        delay: 5s
+    networks:
+      - ferrum
+    volumes:
+      - redis-local:/data
+    logging:
+      driver: local
   es:
     image: elasticsearch:8.5.0
+    labels:
+        Ferrum_Gateway_Id: "??GATEWAY_ID"    
+    profiles: ["single"]
     restart: always
     environment:
       - ES_JAVA_OPTS=-Xms1g -Xmx1g
@@ -78,12 +124,7 @@ services:
       - xpack.security.enabled=true
       - xpack.ml.enabled=false
     deploy:
-      mode: replicated
-      replicas: 1
-      placement:
-        max_replicas_per_node: 1
-        constraints:
-          - "node.role==manager"
+      mode: global
       restart_policy:
         delay: 5s
     mem_limit: 2073741824
@@ -100,6 +141,9 @@ services:
 
   server-ssh:
     image: "??PRIVATE_REGISTRY/ferrumgate/secure.server.ssh:1.0.0"
+    labels:
+        Ferrum_Gateway_Id: "??GATEWAY_ID"
+    profiles: ["single","multi"]
     restart: always
     ports:
       - "9999:9999"
@@ -128,7 +172,10 @@ services:
       driver: local
 
   admin:
-    image: "??PRIVATE_REGISTRY/ferrumgate/job.admin:1.8.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.admin:1.9.0"
+    labels:
+        Ferrum_Gateway_Id: "??GATEWAY_ID"
+    profiles: ["single","mullti"]
     restart: always
     privileged: true
     #cap_add:
@@ -137,8 +184,8 @@ services:
     environment:
       - REDIS_HOST=redis:6379
       - REDIS_PASS=??REDIS_PASS
-      - REDIS_SLAVE_HOST=redis:6379
-      - REDIS_SLAVE_PASS=??REDIS_PASS
+      - REDIS_LOCAL_HOST=redis-local:6379
+      - REDIS_LOCAL_PASS=??REDIS_PASS
       - FERRUM_IO_IMAGE=??PRIVATE_REGISTRY/ferrumgate/ferrum.io:1.3.0
       - ENCRYPT_KEY=??ENCRYPT_KEY
       - GATEWAY_ID=??GATEWAY_ID
@@ -164,7 +211,10 @@ services:
       driver: local
 
   ui:
-    image: "??PRIVATE_REGISTRY/ferrumgate/ui.portal:1.8.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/ui.portal:1.9.0"
+    labels:
+        Ferrum_Gateway_Id: "??GATEWAY_ID"
+    profiles: ["single","multi"]
     restart: always
     deploy:
       mode: global
@@ -176,7 +226,10 @@ services:
       driver: local
 
   rest:
-    image: "??PRIVATE_REGISTRY/ferrumgate/rest.portal:1.8.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/rest.portal:1.9.0"
+    labels:
+        Ferrum_Gateway_Id: "??GATEWAY_ID"
+    profiles: ["single","multi"]
     restart: always
     ports:
       - 80:8181
@@ -185,8 +238,8 @@ services:
       - PORT=8181
       - REDIS_HOST=redis:6379
       - REDIS_PASS=??REDIS_PASS
-      - REDIS_SLAVE_HOST=redis:6379
-      - REDIS_SLAVE_PASS=??REDIS_PASS
+      - REDIS_LOCAL_HOST=redis-local:6379
+      - REDIS_LOCAL_PASS=??REDIS_PASS
       - BASE_RATE_LIMIT=25
       - ENCRYPT_KEY=??ENCRYPT_KEY
       - ES_HOST=http://es:9200
@@ -197,17 +250,12 @@ services:
       - STATIC_FOLDER=/usr/src/app/web
       - UI_HOST=ui:80
     depends_on:
-      - redis
+      - redis-local
       - server-ssh
     deploy:
       restart_policy:
         delay: 5s
-      mode: replicated
-      replicas: 1
-      placement:
-        max_replicas_per_node: 1
-        constraints:
-          - "node.role==manager"
+      mode: global
     volumes:
       - ferrum:/etc/ferrumgate
     networks:
@@ -216,11 +264,14 @@ services:
       driver: local
 
   log:
-    image: "??PRIVATE_REGISTRY/ferrumgate/job.log:1.7.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.log:1.8.0"
+    profiles: ["single","multi"]
     restart: always
     environment:
       - REDIS_HOST=redis:6379
       - REDIS_PASS=??REDIS_PASS
+      - REDIS_LOCAL_HOST=redis-local:6379
+      - REDIS_LOCAL_PASS=??REDIS_PASS
       - ENCRYPT_KEY=??ENCRYPT_KEY
       - ES_HOST=http://es:9200
       - ES_USER=elastic
@@ -238,17 +289,24 @@ services:
       mode: global
       restart_policy:
         delay: 5s
+      labels:
+        Ferrum_Gateway_Id: "??GATEWAY_ID"
     networks:
       - ferrum
     logging:
       driver: local
 
   task:
-    image: "??PRIVATE_REGISTRY/ferrumgate/job.task:1.3.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.task:1.4.0"
+    labels:
+        Ferrum_Gateway_Id: "??GATEWAY_ID"
+    profiles: ["single","multi"]
     restart: always
     environment:
       - REDIS_HOST=redis:6379
       - REDIS_PASS=??REDIS_PASS
+      - REDIS_LOCAL_HOST=redis-local:6379
+      - REDIS_LOCAL_PASS=??REDIS_PASS
       - ENCRYPT_KEY=??ENCRYPT_KEY
       - ES_HOST=http://es:9200
       - ES_USER=elastic

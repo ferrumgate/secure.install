@@ -94,8 +94,9 @@ download() {
     # Abort if download command failed
     [ $? -eq 0 ] || fatal 'Download failed'
 }
-VERSION=1.8.0
+VERSION=1.9.0
 download_and_verify() {
+    info "installing version $VERSION"
     [ "$ENV_FOR" != "PROD" ] && return 0
     verify_downloader curl || verify_downloader wget || fatal 'can not find curl or wget for downloading files'
     verify_command unzip || fatal "can not find unzip command"
@@ -110,8 +111,8 @@ print_usage() {
     echo "usage"
     echo "  ./install.sh [ -h | --help ]          -> prints help"
     echo "  ./install.sh [ -d | --docker ]        -> install with docker"
-    echo "  ./install.sh [ -b| --bridge-network 10.9.0.0/24 ] -> docker bridge network"
-    echo "  ./install.sh [ -s | --docker-swarm ]  -> install with docker-swarm"
+    echo "  ./install.sh [ -b | --bridge-network 10.9.0.0/24 ] -> docker bridge network"
+    echo "  ./install.sh [ -v | --version 1.6.0 ]  -> install custom version"
 
 }
 
@@ -126,8 +127,8 @@ After=docker.service
 Type=oneshot
 RemainAfterExit=true
 WorkingDirectory=/etc/ferrumgate
-ExecStart=docker compose -f ferrumgate.docker.yaml up -d --remove-orphans
-ExecStop=docker compose -f ferrumgate.docker.yaml down
+ExecStart=ferrumgate --start-gateways
+ExecStop=ferrumgate --stop-gateways
 
 [Install]
 WantedBy=multi-user.target
@@ -155,7 +156,7 @@ main() {
     # install type
     local INSTALL="docker"
     local BRIDGE_NETWORK="10.9.0.0/24"
-    ARGS=$(getopt -o 'hdsb:' --long 'help,docker,docker-swarm,bridge-network:' -- "$@") || exit
+    ARGS=$(getopt -o 'hdv:b:' --long 'help,docker,version:,bridge-network:' -- "$@") || exit
     eval "set -- $ARGS"
     local HELP=1
     while true; do
@@ -170,10 +171,9 @@ main() {
             shift
             break
             ;;
-        -s | --docker-swarm)
-            INSTALL="docker-swarm"
-            shift
-            break
+        -v | --version)
+            VERSION="$2"
+            shift 2
             ;;
         -b | --bridge-network)
             BRIDGE_NETWORK="$2"
@@ -252,6 +252,7 @@ main() {
         # set redis password
         info "configuring redis password"
         sed -i "s/??REDIS_PASS/$REDIS_PASS/g" $DOCKER_FILE
+        sed -i "s/??REDIS_LOCAL_PASS/$REDIS_PASS/g" $DOCKER_FILE
 
         info "configuring enc key"
         sed -i "s/??ENCRYPT_KEY/$ENCRYPT_KEY/g" $DOCKER_FILE
@@ -281,7 +282,7 @@ main() {
         if [ $ENV_FOR != "PROD" ]; then
             docker compose -f $DOCKER_FILE down
             docker compose -f $DOCKER_FILE pull
-            docker compose -f $DOCKER_FILE -p ferrumgate up -d --remove-orphans
+            docker compose -f $DOCKER_FILE --profile single -p ferrumgate up -d --remove-orphans
         fi
         info "system is ready"
 

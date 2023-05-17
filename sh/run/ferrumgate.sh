@@ -1,6 +1,7 @@
 #!/bin/sh
 TRUE=0
 FALSE=1
+MODE="single"
 
 ### log functions
 
@@ -56,8 +57,12 @@ print_usage() {
     echo "  ferrumgate [ -h | --help ]        -> prints help"
     echo "  ferrumgate [ -s | --start ]       -> start service"
     echo "  ferrumgate [ -x | --stop ]        -> stop service"
-    echo "  ferrumgate [ -l | --status ]      -> show status"
+    echo "  ferrumgate [ -t | --status ]      -> show status"
     echo "  ferrumgate [ -u | --uninstall ]   -> uninstall"
+    echo "  ferrumgate [ -l process | --logs process]   -> get logs of running process"
+    echo "  process rest, log, admin, task, ssh"
+    echo "  ferrumgate [ -c redis | --config redis ] -> get/set config with name"
+    echo "  ferrumgate [ -m | --multi ] -> get/set working mode single or multi gateway"
 
 }
 
@@ -78,6 +83,29 @@ status_service() {
     systemctl status ferrumgate
     info "for more execute docker ps"
 }
+WORKDIR=/etc/ferrumgate
+
+start_gateways() {
+    docker compose -f $WORKDIR/ferrumgate.docker.yaml --profile $MODE up -d --remove-orphans
+}
+stop_gateways() {
+    docker compose -f $WORKDIR/ferrumgate.docker.yaml --profile $MODE down
+}
+SCRIPT=/usr/local/bin/ferrumgate
+change_mode() {
+
+    info "current mode is $MODE "
+    read -p "do you want to change [Yn] " yesno
+    if [ $yesno = "Y" ]; then
+        read -p "enter single or multi : " mode
+        if [ $mode = "multi" ]; then
+            sed -i "s/^MODE=.*/MODE=multi/g" $SCRIPT
+        else
+            sed -i "s/^MODE=.*/MODE=single/g" $SCRIPT
+        fi
+    fi
+}
+
 uninstall() {
     read -p "are you sure [Yn] " yesno
     if [ $yesno = "Y" ]; then
@@ -107,12 +135,27 @@ ensure_root() {
     fi
 
 }
+logs() {
+    local name=$1
+    docker ps | grep ferrumgate | grep $name | cut -d' ' -f 1 | xargs docker logs -f
+}
+config() {
+    local name=$1
+    if [ name == "redis" ]; then
+        local redis_host=$(cat /etc/ferrumgate/ferrumgate.docker.yaml | grep "REDIS_HOST")
+        local redis_pass=$(cat /etc/ferrumgate/ferrumgate.docker.yaml | grep "REDIS_PASS")
+        echo $redis_host
+        echo $redis_pass
+    fi
+
+}
 
 main() {
     ensure_root
 
-    ARGS=$(getopt -o 'hsxlu' --long 'help,start,stop,status,uninstall' -- "$@") || exit
+    ARGS=$(getopt -o 'hsxtul:c:m' --long 'help,start,stop,status,uninstall,logs:config:,start-gateways,stop-gateways,mode' -- "$@") || exit
     eval "set -- $ARGS"
+    local SERVICE_NAME=''
     local opt=1
     while true; do
         case $1 in
@@ -131,13 +174,40 @@ main() {
             shift
             break
             ;;
-        -l | --status)
+        -t | --status)
             opt=4
             shift
             break
             ;;
         -u | --uninstall)
             opt=5
+            shift
+            break
+            ;;
+        -l | --logs)
+            opt=6
+            SERVICE_NAME="$2"
+            shift 2
+            break
+            ;;
+        -c | --config)
+            opt=7
+            SERVICE_NAME="$2"
+            shift 2
+            break
+            ;;
+        --start-gateways)
+            opt=8
+            shift
+            break
+            ;;
+        --stop-gateways)
+            opt=9
+            shift
+            break
+            ;;
+        -m | --mode)
+            opt=10
             shift
             break
             ;;
@@ -157,6 +227,11 @@ main() {
     [ $opt -eq 3 ] && stop_service && exit 0
     [ $opt -eq 4 ] && status_service && exit 0
     [ $opt -eq 5 ] && uninstall && exit 0
+    [ $opt -eq 6 ] && logs $SERVICE_NAME && exit 0
+    [ $opt -eq 7 ] && config $SERVICE_NAME && exit 0
+    [ $opt -eq 8 ] && start_gateways && exit 0
+    [ $opt -eq 9 ] && stop_gateways && exit 0
+    [ $opt -eq 10 ] && change_mode && exit 0
 
 }
 
