@@ -210,7 +210,7 @@ main() {
         if [ $ENV_FOR = "PROD" ]; then
             prerequities
             docker_install
-            docker_network_bridge_configure ferrum $BRIDGE_NETWORK
+            #docker_network_bridge_configure ferrum $BRIDGE_NETWORK
         fi
 
         # prepare folder permission to only root
@@ -268,8 +268,8 @@ main() {
         #sed -i "s/??SSL_KEY/$SSL_KEY/g" $DOCKER_FILE
 
         mkdir -p /etc/ferrumgate
-        ENV_FILE=/etc/ferrumgate/ferrumgate.env
-        cat >$ENV_FILE <<EOF
+        ENV_FILE_ETC=/etc/ferrumgate/ferrumgate.$GATEWAY_ID.env
+        cat >$ENV_FILE_ETC <<EOF
 MODE=single
 GATEWAY_ID=$GATEWAY_ID
 REDIS_HOST=redis:6379
@@ -281,16 +281,17 @@ ENCRYPT_KEY=$ENCRYPT_KEY
 ES_HOST=http://es:9200
 ES_USER=elastic
 ES_PASS=$ES_PASS
-ES_PASS_ORG=$ESPASS
 LOG_LEVEL=$LOG_LEVEL
 REST_HTTP_PORT=80
 REST_HTTPS_PORT=443
 SSH_PORT=9999
 EOF
 
-        cp -f $DOCKER_FILE /etc/ferrumgate/ferrumgate.docker.yaml
-        chmod 600 /etc/ferrumgate/ferrumgate.docker.yaml
-        chmod 600 $ENV_FILE
+        DOCKER_FILE_ETC=/etc/ferrumgate/ferrumgate.$GATEWAY_ID.yaml
+        cp -f $DOCKER_FILE $DOCKER_FILE_ETC
+
+        chmod 600 $DOCKER_FILE_ETC
+        chmod 600 $ENV_FILE_ETC
 
         info "installing services"
         install_services
@@ -301,9 +302,9 @@ EOF
         chmod +x /usr/local/bin/ferrumgate
 
         if [ $ENV_FOR != "PROD" ]; then
-            docker compose -f $DOCKER_FILE down
-            docker compose -f $DOCKER_FILE pull
-            docker compose -f $DOCKER_FILE --env-file $ENV_FILE --profile single -p ferrumgate-${GATEWAY_ID} up -d --remove-orphans
+            docker compose -f $DOCKER_FILE_ETC --env-file $ENV_FILE_ETC down
+            docker compose -f $DOCKER_FILE_ETC --env-file $ENV_FILE_ETC pull
+            docker compose -f $DOCKER_FILE_ETC --env-file $ENV_FILE_ETC --profile single -p ferrumgate-${GATEWAY_ID} up -d --remove-orphans
         fi
         info "system is ready"
 

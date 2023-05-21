@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 TRUE=0
 FALSE=1
 
@@ -53,15 +53,15 @@ VERSION=??VERSION
 print_usage() {
     echo "usage:"
     echo "version: ${VERSION}"
-    echo "  ferrumgate [ -h | --help ]        -> prints help"
-    echo "  ferrumgate [ -s | --start ]       -> start service"
-    echo "  ferrumgate [ -x | --stop ]        -> stop service"
-    echo "  ferrumgate [ -t | --status ]      -> show status"
-    echo "  ferrumgate [ -u | --uninstall ]   -> uninstall"
-    echo "  ferrumgate [ -l process | --logs process]   -> get logs of running process"
-    echo "  process rest, log, admin, task, ssh"
-    echo "  ferrumgate [ -c redis | --config redis ] -> get/set config with name"
-    echo "  ferrumgate [ -m | --multi ] -> get/set working mode single or multi gateway"
+    echo "  ferrumgate [ -h | --help ]         -> prints help"
+    echo "  ferrumgate [ -s | --start ]        -> start service"
+    echo "  ferrumgate [ -x | --stop ]         -> stop service"
+    echo "  ferrumgate [ -r | --restart ]      -> restart service"
+    echo "  ferrumgate [ -t | --status ]       -> show status"
+    echo "  ferrumgate [ -u | --uninstall ]    -> uninstall"
+    echo "  ferrumgate [ -c | --config ] redis,mode -> get/set config with name"
+    echo "  ferrumgate [ -l | --logs ] process -> get logs of running process"
+    echo "  logs process rest, log, admin, task, ssh"
 
 }
 
@@ -78,42 +78,17 @@ stop_service() {
     info "for more execute docker ps"
 
 }
+restart_service() {
+    stop_service
+    start_service
+
+}
 status_service() {
     systemctl status ferrumgate
     info "for more execute docker ps"
 }
 
-WORKDIR=/etc/ferrumgate
-
-get_mode() {
-    mode=$(cat $WORKDIR/ferrumgate.env | grep MODE= | cut -d'=' -f2)
-    echo $mode
-}
-
-start_gateways() {
-    mode=$(get_mode)
-    docker compose -f $WORKDIR/ferrumgate.docker.yaml --profile $mode up -d --remove-orphans
-}
-
-stop_gateways() {
-    mode=$(get_mode)
-    docker compose -f $WORKDIR/ferrumgate.docker.yaml --profile $mode down
-}
-
-SCRIPT=/usr/local/bin/ferrumgate
-change_mode() {
-    mode=$(get_mode)
-    info "current mode is $mode "
-    read -p "do you want to change [Yn] " yesno
-    if [ $yesno = "Y" ]; then
-        read -p "enter single or multi : " mode
-        if [ $mode = "multi" ]; then
-            sed -i "s/^MODE=.*/MODE=multi/g" $SCRIPT
-        else
-            sed -i "s/^MODE=.*/MODE=single/g" $SCRIPT
-        fi
-    fi
-}
+ETCDIR=/etc/ferrumgate
 
 uninstall() {
     read -p "are you sure [Yn] " yesno
@@ -144,17 +119,169 @@ ensure_root() {
     fi
 
 }
-logs() {
-    local name=$1
-    docker ps | grep ferrumgate | grep $name | cut -d' ' -f 1 | xargs docker logs -f
+find_default_gateway() {
+    for file in $(ls $ETCDIR); do
+        if [[ $file = *.env ]]; then
+
+            local gatewayId=$(echo "$file" | sed -e "s/ferrumgate.//" -e "s/.env//")
+            echo $gatewayId
+            break
+        fi
+    done
 }
-config() {
-    local name=$1
-    if [ name == "redis" ]; then
-        local redis_host=$(cat /etc/ferrumgate/ferrumgate.docker.yaml | grep "REDIS_HOST")
-        local redis_pass=$(cat /etc/ferrumgate/ferrumgate.docker.yaml | grep "REDIS_PASS")
-        echo $redis_host
-        echo $redis_pass
+logs() {
+    if [ $# -lt 2 ]; then
+        error "need 2 arguments"
+        exit 1
+    fi
+    local service=$2
+    local gateway_id=$1
+
+    docker ps | grep ferrumgate-$gateway_id | grep $service | cut -d" " -f1 | xargs -r docker logs -f
+}
+
+get_mode() {
+    if [ $# -lt 1 ]; then
+        error "no arguments supplied"
+        exit 1
+    fi
+    local file=ferrumgate.$1.env
+    mode=$(cat $ETCDIR/$file | grep MODE= | cut -d'=' -f2)
+    echo $mode
+}
+
+list_gateways() {
+    for file in $(ls $ETCDIR); do
+        if [[ $file = *.env ]]; then
+
+            local gatewayId=$(echo "$file" | sed -e "s/ferrumgate.//" -e "s/.env//")
+            info $gatewayId
+        fi
+    done
+}
+delete_gateway() {
+    if [ $# -lt 1 ]; then
+        error "no arguments supplied"
+        exit 1
+    fi
+    local gateway_id=$1
+    stop_gateway $gateway_id
+    rm -rf $ETCDIR/ferrumgate.$gateway_id.yaml
+    rm -rf $ETCDIR/ferrumgate.$gateway_id.env
+    docker network ls | grep $gateway_id | tr -s ' ' | cut -d' ' -f2 | xargs -r docker network rm
+    docker volume ls | grep $gateway_id | tr -s ' ' | cut -d' ' -f2 | xargs -r docker volume rm
+
+}
+
+start_gateway() {
+    if [ $# -lt 1 ]; then
+        error "no arguments supplied"
+        exit 1
+    fi
+
+    local gatewayId=$1
+    local mode=$(get_mode $1)
+    docker compose -f $ETCDIR/ferrumgate.$gatewayId.yaml --env-file $ETCDIR/ferrumgate.$gatewayId.env \
+        -p ferrumgate-$gatewayId --profile $mode up -d --remove-orphans
+}
+
+start_gateways() {
+
+    for file in $(ls $ETCDIR); do
+        if [[ $file = *.env ]]; then
+            local gatewayId=$(echo "$file" | sed -e "s/ferrumgate.//" -e "s/.env//")
+            start_gateway $gatewayId
+        fi
+    done
+
+}
+stop_gateway() {
+
+    if [ $# -lt 1 ]; then
+        error "no arguments supplied"
+        exit 1
+    fi
+
+    local gatewayId=$1
+    local mode=$(get_mode $gatewayId)
+    docker compose -f $ETCDIR/ferrumgate.$gatewayId.yaml --env-file $ETCDIR/ferrumgate.$gatewayId.env \
+        -p ferrumgate-$gatewayId --profile $mode down
+}
+
+stop_gateways() {
+
+    for file in $(ls $ETCDIR); do
+        if [[ $file = *.env ]]; then
+
+            local gatewayId=$(echo "$file" | sed -e "s/ferrumgate.//" -e "s/.env//")
+            stop_gateway $gatewayId
+        fi
+    done
+
+}
+
+set_config_gateway() {
+    if [ $# -lt 3 ]; then
+        error "no arguments supplied"
+        exit 1
+    fi
+    local gatewayId=$1
+    local key=$2
+    local value=$3
+    file=$ETCDIR/ferrumgate.$gatewayId.env
+    sed -i "s/^$key=.*/$key=$value/g" $file
+
+}
+get_config_gateway() {
+    if [ $# -lt 2 ]; then
+        error "no arguments supplied"
+        exit 1
+    fi
+    local gatewayId=$1
+    local key=$2
+
+    file=$ETCDIR/ferrumgate.$gatewayId.env
+    value=$(cat $file | grep $key= | cut -d" " -f2)
+    echo $value
+}
+
+config_gateway() {
+    if [ $# -lt 2 ]; then
+        error "no arguments supplied"
+        exit 1
+    fi
+    local gatewayId=$1
+    local param=$2
+    if [ $param = "mode" ]; then
+
+        mode=$(get_mode $gatewayId)
+        info "current mode is $mode "
+        read -p "do you want to change [Yn] " yesno
+        if [ $yesno = "Y" ]; then
+            read -p "enter single or cluster : " mode
+            if [ $mode = "cluster" ]; then
+                set_config_gateway $gatewayId MODE cluster
+            else
+                set_config_gateway $gatewayId MODE single
+            fi
+        fi
+    fi
+    if [ $param = "redis" ]; then
+
+        mode=$(get_mode $gatewayId)
+        info "current mode is $mode "
+        redis=$(get_config_gateway $gatewayId REDIS_HOST)
+        redis_pass=$(get_config_gateway $gatewayId REDIS_PASS)
+        echo redis:$redis
+        echo pass:$redis_pass
+        read -p "do you want to change [Yn] " yesno
+        if [ $yesno = "Y" ]; then
+            read -p "enter host : " host
+            set_config_gateway $gatewayId REDIS_HOST $host
+            read -p "enter pass : " pass
+            set_config_gateway $gatewayId REDIS_PASS $pass
+
+        fi
     fi
 
 }
@@ -162,9 +289,21 @@ config() {
 main() {
     ensure_root
 
-    ARGS=$(getopt -o 'hsxtul:c:m' --long 'help,start,stop,status,uninstall,logs:config:,start-gateways,stop-gateways,mode' -- "$@") || exit
+    ARGS=$(getopt -o 'hsxrtul:c:g:' --long '\
+    help,start,stop,restart,status,uninstall,\
+    logs:,\
+    gateway:,\
+    start-gateways,\
+    stop-gateways,\
+    list-gateways,\
+    start-gateway:,\
+    stop-gateway:,\
+    delete-gateway:,\
+    config:\' -- "$@") || exit
     eval "set -- $ARGS"
-    local SERVICE_NAME=''
+    local service_name=''
+    local gateway_id=''
+    local parameter_name=''
     local opt=1
     while true; do
         case $1 in
@@ -183,26 +322,29 @@ main() {
             shift
             break
             ;;
-        -t | --status)
+        -r | --restart)
             opt=4
             shift
             break
             ;;
-        -u | --uninstall)
+        -t | --status)
             opt=5
             shift
             break
             ;;
+        -g | --gateway)
+            gateway_id="$2"
+            shift 2
+            ;;
         -l | --logs)
             opt=6
-            SERVICE_NAME="$2"
-            shift 2
+            service_name="$2"
+            shift 3
             break
             ;;
-        -c | --config)
+        -u | --uninstall)
             opt=7
-            SERVICE_NAME="$2"
-            shift 2
+            shift
             break
             ;;
         --start-gateways)
@@ -215,9 +357,33 @@ main() {
             shift
             break
             ;;
-        -m | --mode)
+        --list-gateways)
             opt=10
             shift
+            break
+            ;;
+        --start-gateway)
+            opt=11
+            gateway_id="$2"
+            shift 2
+            break
+            ;;
+        --stop-gateway)
+            opt=12
+            gateway_id="$2"
+            shift 2
+            break
+            ;;
+        --delete-gateway)
+            opt=13
+            gateway_id="$2"
+            shift 2
+            break
+            ;;
+        -c | --config)
+            opt=14
+            parameter_name="$2"
+            shift 2
             break
             ;;
         --)
@@ -231,16 +397,24 @@ main() {
         esac
     done
 
+    if [ -z $gateway_id ]; then
+        gateway_id=$(find_default_gateway)
+    fi
+
     [ $opt -eq 1 ] && print_usage && exit 0
     [ $opt -eq 2 ] && start_service && exit 0
     [ $opt -eq 3 ] && stop_service && exit 0
-    [ $opt -eq 4 ] && status_service && exit 0
-    [ $opt -eq 5 ] && uninstall && exit 0
-    [ $opt -eq 6 ] && logs $SERVICE_NAME && exit 0
-    [ $opt -eq 7 ] && config $SERVICE_NAME && exit 0
+    [ $opt -eq 4 ] && restart_service && exit 0
+    [ $opt -eq 5 ] && status_service && exit 0
+    [ $opt -eq 6 ] && logs $gateway_id $service_name && exit 0
+    [ $opt -eq 7 ] && uninstall && exit 0
     [ $opt -eq 8 ] && start_gateways && exit 0
     [ $opt -eq 9 ] && stop_gateways && exit 0
-    [ $opt -eq 10 ] && change_mode && exit 0
+    [ $opt -eq 10 ] && list_gateways && exit 0
+    [ $opt -eq 11 ] && start_gateway $gateway_id && exit 0
+    [ $opt -eq 12 ] && stop_gateway $gateway_id && exit 0
+    [ $opt -eq 13 ] && delete_gateway $gateway_id && exit 0
+    [ $opt -eq 14 ] && config_gateway $gateway_id $parameter_name && exit 0
 
 }
 

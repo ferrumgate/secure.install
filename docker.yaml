@@ -1,7 +1,7 @@
 version: "3.9"
 
 networks:
-  ferrum-${GATEWAY_ID}:
+  ferrum:
 
 volumes:
   redis:
@@ -15,7 +15,7 @@ services:
     image: alpine:3.17
     labels:
         Ferrum_Gateway_Id: "${GATEWAY_ID}"
-    profiles: ["single","multi"]
+    profiles: ["single","cluster"]
     command:
       - /bin/sh
       - -c
@@ -64,7 +64,7 @@ services:
       restart_policy:
         delay: 5s
     networks:
-      - ferrum-${GATEWAY_ID}
+      - ferrum
     volumes:
       - redis:/data
     logging:
@@ -74,7 +74,7 @@ services:
     image: redis:7-bullseye
     labels:
         Ferrum_Gateway_Id: ${GATEWAY_ID}
-    profiles: ["single","multi"]
+    profiles: ["single","cluster"]
     command:
       - /bin/bash
       - -c
@@ -105,7 +105,7 @@ services:
       restart_policy:
         delay: 5s
     networks:
-      - ferrum-${GATEWAY_ID}
+      - ferrum
     volumes:
       - redis-local:/data
     logging:
@@ -132,7 +132,7 @@ services:
         soft: -1
         hard: -1
     networks:
-      - ferrum-${GATEWAY_ID}
+      - ferrum
     volumes:
       - es:/usr/share/elasticsearch/data
     logging:
@@ -142,7 +142,7 @@ services:
     image: "??PRIVATE_REGISTRY/ferrumgate/secure.server.ssh:1.0.0"
     labels:
         Ferrum_Gateway_Id: ${GATEWAY_ID}
-    profiles: ["single","multi"]
+    profiles: ["single","cluster"]
     restart: always
     ports:
       - "${SSH_PORT}:9999"
@@ -166,7 +166,7 @@ services:
       - /dev/urandom:/dev/urandom
       - ferrum:/etc/ferrumgate
     networks:
-      - ferrum-${GATEWAY_ID}
+      - ferrum
     logging:
       driver: local
 
@@ -213,14 +213,14 @@ services:
     image: "??PRIVATE_REGISTRY/ferrumgate/ui.portal:1.9.0"
     labels:
         Ferrum_Gateway_Id: ${GATEWAY_ID}
-    profiles: ["single","multi"]
+    profiles: ["single","cluster"]
     restart: always
     deploy:
       mode: global
       restart_policy:
         delay: 5s
     networks:
-      - ferrum-${GATEWAY_ID}
+      - ferrum
     logging:
       driver: local
 
@@ -228,7 +228,7 @@ services:
     image: "??PRIVATE_REGISTRY/ferrumgate/rest.portal:1.9.0"
     labels:
         Ferrum_Gateway_Id: ${GATEWAY_ID}
-    profiles: ["single","multi"]
+    profiles: ["single","cluster"]
     restart: always
     ports:
       - ${REST_HTTP_PORT}:8181
@@ -266,7 +266,7 @@ services:
     image: "??PRIVATE_REGISTRY/ferrumgate/job.log:1.8.0"
     labels:
         Ferrum_Gateway_Id: ${GATEWAY_ID}
-    profiles: ["single","multi"]
+    profiles: ["single","cluster"]
     restart: always
     environment:
       - REDIS_HOST=${REDIS_HOST}
@@ -299,7 +299,7 @@ services:
     image: "??PRIVATE_REGISTRY/ferrumgate/job.task:1.4.0"
     labels:
         Ferrum_Gateway_Id: ${GATEWAY_ID}
-    profiles: ["single","multi"]
+    profiles: ["single","cluster"]
     restart: always
     environment:
       - REDIS_HOST=${REDIS_HOST}
