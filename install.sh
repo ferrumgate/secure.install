@@ -267,9 +267,12 @@ main() {
         #sed -i "s/??SSL_PUB/$SSL_PUB/g" $DOCKER_FILE
         #sed -i "s/??SSL_KEY/$SSL_KEY/g" $DOCKER_FILE
 
+        sed -i "s/??SSH_PORT/9999/g" $DOCKER_FILE
+
         mkdir -p /etc/ferrumgate
         ENV_FILE_ETC=/etc/ferrumgate/ferrumgate.$GATEWAY_ID.env
         cat >$ENV_FILE_ETC <<EOF
+DEPLOY=docker
 MODE=single
 GATEWAY_ID=$GATEWAY_ID
 REDIS_HOST=redis:6379
@@ -284,7 +287,6 @@ ES_PASS=$ES_PASS
 LOG_LEVEL=$LOG_LEVEL
 REST_HTTP_PORT=80
 REST_HTTPS_PORT=443
-SSH_PORT=9999
 EOF
 
         DOCKER_FILE_ETC=/etc/ferrumgate/ferrumgate.$GATEWAY_ID.yaml

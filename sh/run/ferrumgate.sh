@@ -280,6 +280,11 @@ config_gateway() {
             set_config_gateway $gatewayId REDIS_HOST $host
             read -p "enter pass : " pass
             set_config_gateway $gatewayId REDIS_PASS $pass
+            if [ $host = "redis" ]; then
+                set_config_gateway $gatewayId MODE single
+            else
+                set_config_gateway $gatewayId MODE cluster
+            fi
 
         fi
     fi

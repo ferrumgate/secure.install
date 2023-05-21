@@ -145,9 +145,9 @@ services:
     profiles: ["single","cluster"]
     restart: always
     ports:
-      - "${SSH_PORT}:9999"
+      - "??SSH_PORT:9999"
     environment:
-      - REDIS_HOST=${REDIS_HOST_SSH}
+      - REDIS_HOST=${REDIS_HOST}
       - REDIS_PASS=${REDIS_PASS}
       - PORT=9999
       - GATEWAY_ID=${GATEWAY_ID}
