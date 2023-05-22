@@ -8,7 +8,7 @@ FerrumGate Zero Trust Access solution installation scripts for
 
 > sh install.sh --help
 
-> sh install.sh --docker [--bridge-network 10.11.0.0/24]
+> sh install.sh --docker
 
 > sh install.sh --version 1.8.0
 

@@ -150,13 +150,30 @@ create_certificates() {
     openssl req -x509 -nodes -days 3650 -newkey rsa:2048 -keyout ${domain}.key -out ${domain}.crt -subj "/CN=${domain}/O=${domain}" 2>/dev/null
     echo ${domain}
 }
+ETC_DIR=/etc/ferrumgate
+get_config() {
+    if [ $# -lt 1 ]; then
+        error "no arguments supplied"
+        exit 1
+    fi
+    local key=$1
+
+    file=$ETC_DIR/ferrumgate.env
+    if [ ! -f $file ]; then
+        echo ""
+        return
+    fi
+    value=$(cat $file | grep $key= | cut -d"=" -f2)
+    echo $value
+}
 
 main() {
     ensure_root
+
     # install type
     local INSTALL="docker"
-    local BRIDGE_NETWORK="10.9.0.0/24"
-    ARGS=$(getopt -o 'hdv:b:' --long 'help,docker,version:,bridge-network:' -- "$@") || exit
+    #local BRIDGE_NETWORK="10.9.0.0/24"
+    ARGS=$(getopt -o 'hdv:b:' --long 'help,docker,version:' -- "$@") || exit
     eval "set -- $ARGS"
     local HELP=1
     while true; do
@@ -174,11 +191,6 @@ main() {
         -v | --version)
             VERSION="$2"
             shift 2
-            ;;
-        -b | --bridge-network)
-            BRIDGE_NETWORK="$2"
-            shift 2
-            break
             ;;
         --)
             shift
@@ -205,6 +217,7 @@ main() {
     . ./sh/prerequities.sh
     . ./sh/docker.sh
 
+    mkdir -p $ETC_DIR
     if [ "$INSTALL" = "docker" ]; then
 
         if [ $ENV_FOR = "PROD" ]; then
@@ -215,27 +228,64 @@ main() {
 
         # prepare folder permission to only root
         chmod -R 600 $(pwd)
-        DOCKER_FILE=docker.yaml
-        cp $DOCKER_FILE compose.yaml
-        DOCKER_FILE=compose.yaml
 
-        if [ $ENV_FOR != "PROD" ]; then # for test use local private registry
-
-            sed -i 's#??PRIVATE_REGISTRY/#registry.ferrumgate.zero/#g' $DOCKER_FILE
-        else
-            sed -i 's#??PRIVATE_REGISTRY/##g' $DOCKER_FILE
-
+        LOG_LEVEL=$(get_config LOG_LEVEL)
+        if [ -z $LOG_LEVEL ]; then
+            LOG_LEVEL=info
         fi
-        LOG_LEVEL=info
-        GATEWAY_ID=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 16 | head -n 1)
-        REDIS_PASS=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 64 | head -n 1)
-        ES_PASS=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 64 | head -n 1)
-        ENCRYPT_KEY=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 32 | head -n 1)
-        SSL_FILE=$(create_certificates)
 
-        SSL_PUB=$(cat ${SSL_FILE}.crt | base64 -w 0)
-        SSL_KEY=$(cat ${SSL_FILE}.key | base64 -w 0)
-        rm ${SSL_FILE}.crt && rm ${SSL_FILE}.key
+        GATEWAY_ID=$(get_config GATEWAY_ID)
+        if [ -z $GATEWAY_ID ]; then
+            GATEWAY_ID=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 16 | head -n 1 | tr '[:upper:]' '[:lower:]')
+        fi
+
+        REDIS_HOST=$(get_config REDIS_HOST)
+        if [ -z $REDIS_HOST ]; then
+            REDIS_HOST="redis:6379"
+        fi
+
+        REDIS_HOST_SSH=$(echo $REDIS_HOST | sed 's/:/#/g')
+
+        REDIS_PASS=$(get_config REDIS_PASS)
+        if [ -z $REDIS_PASS ]; then
+            REDIS_PASS=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 64 | head -n 1)
+        fi
+
+        ES_HOST=$(get_config ES_HOST)
+        if [ -z $ES_HOST ]; then
+            ES_HOST=http://es:9200
+        fi
+
+        ES_PASS=$(get_config ES_PASS)
+        if [ -z $ES_PASS ]; then
+            ES_PASS=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 64 | head -n 1)
+        fi
+
+        ES_USER=$(get_config ES_USER)
+        if [ -z $ES_USER ]; then
+            ES_USER=elastic
+        fi
+
+        ENCRYPT_KEY=$(get_config ENCRYPT_KEY)
+
+        if [ -z $ENCRYPT_KEY ]; then
+            ENCRYPT_KEY=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 32 | head -n 1)
+        fi
+
+        MODE=$(get_config MODE)
+        if [ -z $MODE ]; then
+            MODE=single
+        fi
+
+        REDIS_LOCAL_HOST=$(get_config REDIS_LOCAL_HOST)
+        if [ -z $REDIS_LOCAL_HOST ]; then
+            REDIS_LOCAL_HOST=redis-local:6379
+        fi
+
+        #SSL_FILE=$(create_certificates)
+        #SSL_PUB=$(cat ${SSL_FILE}.crt | base64 -w 0)
+        #SSL_KEY=$(cat ${SSL_FILE}.key | base64 -w 0)
+        #rm ${SSL_FILE}.crt && rm ${SSL_FILE}.key
 
         if [ $ENV_FOR != "PROD" ]; then
             GATEWAY_ID=4s6ro4xte8009p96
@@ -245,55 +295,70 @@ main() {
             LOG_LEVEL=debug
 
         fi
-        # set gateway id
-        info "configuring gateway id"
-        #sed -i "s/??GATEWAY_ID/$GATEWAY_ID/g" $DOCKER_FILE
 
-        # set redis password
-        info "configuring redis password"
-        #sed -i "s/??REDIS_PASS/$REDIS_PASS/g" $DOCKER_FILE
-        #sed -i "s/??REDIS_LOCAL_PASS/$REDIS_PASS/g" $DOCKER_FILE
-
-        info "configuring enc key"
-        #sed -i "s/??ENCRYPT_KEY/$ENCRYPT_KEY/g" $DOCKER_FILE
-
-        info "configuring es password"
-        #sed -i "s/??ES_PASS/$ES_PASS/g" $DOCKER_FILE
-
-        info "configuring log level"
-        #sed -i "s/??LOG_LEVEL/$LOG_LEVEL/g" $DOCKER_FILE
-
-        info "configuring ssl certificates"
-        #sed -i "s/??SSL_PUB/$SSL_PUB/g" $DOCKER_FILE
-        #sed -i "s/??SSL_KEY/$SSL_KEY/g" $DOCKER_FILE
-
-        sed -i "s/??SSH_PORT/9999/g" $DOCKER_FILE
-
-        mkdir -p /etc/ferrumgate
-        ENV_FILE_ETC=/etc/ferrumgate/ferrumgate.$GATEWAY_ID.env
+        ENV_FILE_ETC=$ETC_DIR/env
         cat >$ENV_FILE_ETC <<EOF
 DEPLOY=docker
-MODE=single
-GATEWAY_ID=$GATEWAY_ID
-REDIS_HOST=redis:6379
-REDIS_HOST_SSH=redis#6379
+REDIS_HOST=$REDIS_HOST
+REDIS_HOST_SSH=$REDIS_HOST_SSH
 REDIS_PASS=$REDIS_PASS
 REDIS_LOCAL_HOST=redis-local:6379
+REDIS_LOCAL_BASE_HOST=redis-local-base:6379
 REDIS_LOCAL_PASS=$REDIS_PASS
 ENCRYPT_KEY=$ENCRYPT_KEY
-ES_HOST=http://es:9200
-ES_USER=elastic
+ES_HOST=$ES_HOST
+ES_USER=$ES_USER
 ES_PASS=$ES_PASS
 LOG_LEVEL=$LOG_LEVEL
 REST_HTTP_PORT=80
 REST_HTTPS_PORT=443
 EOF
 
-        DOCKER_FILE_ETC=/etc/ferrumgate/ferrumgate.$GATEWAY_ID.yaml
-        cp -f $DOCKER_FILE $DOCKER_FILE_ETC
-
-        chmod 600 $DOCKER_FILE_ETC
         chmod 600 $ENV_FILE_ETC
+
+        #copy base file
+        DOCKER_BASE_FILE=docker.base.yaml
+        cp $DOCKER_BASE_FILE compose.yaml
+
+        DOCKER_FILE=compose.yaml
+
+        if [ $ENV_FOR != "PROD" ]; then # for test use local private registry
+
+            sed -i 's#??PRIVATE_REGISTRY/#registry.ferrumgate.zero/#g' $DOCKER_FILE
+        else
+            sed -i 's#??PRIVATE_REGISTRY/##g' $DOCKER_FILE
+
+        fi
+
+        DOCKER_FILE_BASE_ETC=$ETC_DIR/base.yaml
+        cp -f $DOCKER_FILE $DOCKER_FILE_BASE_ETC
+
+        chmod 600 $DOCKER_FILE_BASE_ETC
+
+        # copy gateway sample
+        DOCKER_GATEWAY_FILE=docker.gateway.yaml
+        cp $DOCKER_GATEWAY_FILE compose.yaml
+
+        DOCKER_FILE=compose.yaml
+
+        if [ $ENV_FOR != "PROD" ]; then # for test use local private registry
+
+            sed -i 's#??PRIVATE_REGISTRY/#registry.ferrumgate.zero/#g' $DOCKER_FILE
+        else
+            sed -i 's#??PRIVATE_REGISTRY/##g' $DOCKER_FILE
+
+        fi
+
+        DOCKER_FILE_ETC=$ETC_DIR/gateway.yaml
+        cp -f $DOCKER_FILE $DOCKER_FILE_ETC
+        chmod 600 $DOCKER_FILE_ETC
+
+        sed -i "s/??GATEWAY_ID/$GATEWAY_ID/g" $DOCKER_FILE
+        sed -i 's/??SSH_PORT/9999/g' $DOCKER_FILE
+
+        DOCKER_FILE_GATEWAY_ETC=$ETC_DIR/gateway.$GATEWAY_ID.yaml
+        cp -f $DOCKER_FILE $DOCKER_FILE_GATEWAY_ETC
+        chmod 600 $DOCKER_FILE_GATEWAY_ETC
 
         info "installing services"
         install_services
@@ -302,11 +367,14 @@ EOF
         sed -i "s/??VERSION/$VERSION/g" sh/run/ferrumgate.sh
         cp sh/run/ferrumgate.sh /usr/local/bin/ferrumgate
         chmod +x /usr/local/bin/ferrumgate
+        #docker node update --label-add Ferrum_Node=management $(hostname)
 
         if [ $ENV_FOR != "PROD" ]; then
-            docker compose -f $DOCKER_FILE_ETC --env-file $ENV_FILE_ETC down
-            docker compose -f $DOCKER_FILE_ETC --env-file $ENV_FILE_ETC pull
-            docker compose -f $DOCKER_FILE_ETC --env-file $ENV_FILE_ETC --profile single -p ferrumgate-${GATEWAY_ID} up -d --remove-orphans
+            docker compose -f $DOCKER_FILE_BASE_ETC --env-file $ENV_FILE_ETC pull
+            docker compose -f $DOCKER_FILE_BASE_ETC --env-file $ENV_FILE_ETC --profile single -p fg-base up -d --remove-orphans
+
+            docker compose -f $DOCKER_FILE_GATEWAY_ETC --env-file $ENV_FILE_ETC pull
+            docker compose -f $DOCKER_FILE_GATEWAY_ETC --env-file $ENV_FILE_ETC -p fg-${GATEWAY_ID} up -d --remove-orphans
         fi
         info "system is ready"
 

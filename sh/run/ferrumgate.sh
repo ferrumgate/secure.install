@@ -59,9 +59,13 @@ print_usage() {
     echo "  ferrumgate [ -r | --restart ]      -> restart service"
     echo "  ferrumgate [ -t | --status ]       -> show status"
     echo "  ferrumgate [ -u | --uninstall ]    -> uninstall"
-    echo "  ferrumgate [ -c | --config ] redis,mode -> get/set config with name"
-    echo "  ferrumgate [ -l | --logs ] process -> get logs of running process"
-    echo "  logs process rest, log, admin, task, ssh"
+    echo "  ferrumgate [ -c | --config ] redis -> get/set config with name, redis"
+    echo "  ferrumgate [ -l | --logs ] process -> get logs of process rest, log-base, log, admin, task, ssh"
+    echo "  ferrumgate [ --list-gateways ]     -> list gateways"
+    echo "  ferrumgate [ --start-gateway ] 4s3a92dd023 -> start a gateway"
+    echo "  ferrumgate [ --stop-gateway ] 4s3a92dd023 -> stop a gateway"
+    echo "  ferrumgate [ --delete-gateway ] 4s3a92dd023  -> delete a gateway"
+    echo "  ferrumgate [ --create-gateway ] -> creates a new gateway"
 
 }
 
@@ -88,7 +92,7 @@ status_service() {
     info "for more execute docker ps"
 }
 
-ETCDIR=/etc/ferrumgate
+ETC_DIR=/etc/ferrumgate
 
 uninstall() {
     read -p "are you sure [Yn] " yesno
@@ -120,10 +124,9 @@ ensure_root() {
 
 }
 find_default_gateway() {
-    for file in $(ls $ETCDIR); do
-        if [[ $file = *.env ]]; then
-
-            local gatewayId=$(echo "$file" | sed -e "s/ferrumgate.//" -e "s/.env//")
+    for file in $(ls $ETC_DIR); do
+        if [[ $file = gateway.*.yaml ]]; then
+            local gatewayId=$(echo "$file" | sed -e "s/gateway.//" -e "s/.yaml//")
             echo $gatewayId
             break
         fi
@@ -136,26 +139,35 @@ logs() {
     fi
     local service=$2
     local gateway_id=$1
+    local grepname=fg-$gateway_id
 
-    docker ps | grep ferrumgate-$gateway_id | grep $service | cut -d" " -f1 | xargs -r docker logs -f
-}
-
-get_mode() {
-    if [ $# -lt 1 ]; then
-        error "no arguments supplied"
-        exit 1
+    if [ $service = "rest" ]; then
+        grepname=fg-base
     fi
-    local file=ferrumgate.$1.env
-    mode=$(cat $ETCDIR/$file | grep MODE= | cut -d'=' -f2)
-    echo $mode
+    if [ $service = "redis" ]; then
+        grepname=fg-base
+    fi
+    if [ $service = "es" ]; then
+        grepname=fg-base
+    fi
+    if [ $service = "task" ]; then
+        grepname=fg-base
+    fi
+    if [ $service = "log-base" ]; then
+        grepname=fg-base
+    fi
+
+    docker ps | grep $grepname | grep $service | cut -d" " -f1 | xargs -r docker logs -f
 }
 
 list_gateways() {
-    for file in $(ls $ETCDIR); do
-        if [[ $file = *.env ]]; then
+    for file in $(ls $ETC_DIR); do
+        if [[ $file = gateway.*.yaml ]]; then
 
-            local gatewayId=$(echo "$file" | sed -e "s/ferrumgate.//" -e "s/.env//")
+            local gatewayId=$(echo "$file" | sed -e "s/gateway.//" -e "s/.yaml//")
+
             info $gatewayId
+
         fi
     done
 }
@@ -166,11 +178,33 @@ delete_gateway() {
     fi
     local gateway_id=$1
     stop_gateway $gateway_id
-    rm -rf $ETCDIR/ferrumgate.$gateway_id.yaml
-    rm -rf $ETCDIR/ferrumgate.$gateway_id.env
+    rm -rf $ETC_DIR/gateway.$gateway_id.yaml
     docker network ls | grep $gateway_id | tr -s ' ' | cut -d' ' -f2 | xargs -r docker network rm
     docker volume ls | grep $gateway_id | tr -s ' ' | cut -d' ' -f2 | xargs -r docker volume rm
 
+}
+
+create_gateway() {
+    read -p "enter a port for ssh tunnel server: " port
+    local gateway_id=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 16 | head -n 1 | tr '[:upper:]' '[:lower:]')
+    DOCKER_FILE=$ETC_DIR/gateway.$gateway_id.yaml
+    rm -rf $DOCKER_FILE
+    cp $ETC_DIR/gateway.yaml $DOCKER_FILE
+    sed -i "s/??GATEWAY_ID/$gateway_id/g" $DOCKER_FILE
+    sed -i "s/??SSH_PORT/$port/g" $DOCKER_FILE
+    info "created gateway $gateway_id  at port $port"
+    info "start gateway"
+}
+
+start_base() {
+
+    docker compose -f $ETC_DIR/base.yaml --env-file $ETC_DIR/env \
+        -p fg-base up -d --remove-orphans
+}
+stop_base() {
+
+    docker compose -f $ETC_DIR/base.yaml --env-file $ETC_DIR/env \
+        -p fg-base down
 }
 
 start_gateway() {
@@ -180,16 +214,15 @@ start_gateway() {
     fi
 
     local gatewayId=$1
-    local mode=$(get_mode $1)
-    docker compose -f $ETCDIR/ferrumgate.$gatewayId.yaml --env-file $ETCDIR/ferrumgate.$gatewayId.env \
-        -p ferrumgate-$gatewayId --profile $mode up -d --remove-orphans
+    docker compose -f $ETC_DIR/gateway.$gatewayId.yaml --env-file $ETC_DIR/env \
+        -p fg-$gatewayId up -d --remove-orphans
 }
 
 start_gateways() {
-
-    for file in $(ls $ETCDIR); do
-        if [[ $file = *.env ]]; then
-            local gatewayId=$(echo "$file" | sed -e "s/ferrumgate.//" -e "s/.env//")
+    start_base
+    for file in $(ls $ETC_DIR); do
+        if [[ $file = gateway.*.yaml ]]; then
+            local gatewayId=$(echo "$file" | sed -e "s/gateway.//" -e "s/.yaml//")
             start_gateway $gatewayId
         fi
     done
@@ -203,88 +236,77 @@ stop_gateway() {
     fi
 
     local gatewayId=$1
-    local mode=$(get_mode $gatewayId)
-    docker compose -f $ETCDIR/ferrumgate.$gatewayId.yaml --env-file $ETCDIR/ferrumgate.$gatewayId.env \
-        -p ferrumgate-$gatewayId --profile $mode down
+    docker compose -f $ETC_DIR/gateway.$gatewayId.yaml --env-file $ETC_DIR/env \
+        -p fg-$gatewayId down
 }
 
 stop_gateways() {
 
-    for file in $(ls $ETCDIR); do
-        if [[ $file = *.env ]]; then
+    for file in $(ls $ETC_DIR); do
+        if [[ $file = *.yaml ]]; then
 
-            local gatewayId=$(echo "$file" | sed -e "s/ferrumgate.//" -e "s/.env//")
+            local gatewayId=$(echo "$file" | sed -e "s/ferrumgate.//" -e "s/.yaml//")
             stop_gateway $gatewayId
         fi
     done
+    stop_base
 
 }
 
-set_config_gateway() {
-    if [ $# -lt 3 ]; then
-        error "no arguments supplied"
-        exit 1
-    fi
-    local gatewayId=$1
-    local key=$2
-    local value=$3
-    file=$ETCDIR/ferrumgate.$gatewayId.env
-    sed -i "s/^$key=.*/$key=$value/g" $file
-
-}
-get_config_gateway() {
+set_config() {
     if [ $# -lt 2 ]; then
         error "no arguments supplied"
         exit 1
     fi
-    local gatewayId=$1
-    local key=$2
+    local key=$1
+    local value=$2
+    file=$ETC_DIR/env
+    sed -i "s/^$key=.*/$key=$value/g" $file
 
-    file=$ETCDIR/ferrumgate.$gatewayId.env
+}
+get_config() {
+    if [ $# -lt 1 ]; then
+        error "no arguments supplied"
+        exit 1
+    fi
+
+    local key=$1
+
+    file=$ETC_DIR/env
     value=$(cat $file | grep $key= | cut -d" " -f2)
     echo $value
 }
 
-config_gateway() {
-    if [ $# -lt 2 ]; then
+config() {
+    if [ $# -lt 1 ]; then
         error "no arguments supplied"
         exit 1
     fi
-    local gatewayId=$1
-    local param=$2
-    if [ $param = "mode" ]; then
 
-        mode=$(get_mode $gatewayId)
-        info "current mode is $mode "
-        read -p "do you want to change [Yn] " yesno
-        if [ $yesno = "Y" ]; then
-            read -p "enter single or cluster : " mode
-            if [ $mode = "cluster" ]; then
-                set_config_gateway $gatewayId MODE cluster
-            else
-                set_config_gateway $gatewayId MODE single
-            fi
-        fi
-    fi
+    local param=$1
+
     if [ $param = "redis" ]; then
 
-        mode=$(get_mode $gatewayId)
-        info "current mode is $mode "
-        redis=$(get_config_gateway $gatewayId REDIS_HOST)
-        redis_pass=$(get_config_gateway $gatewayId REDIS_PASS)
-        echo redis:$redis
-        echo pass:$redis_pass
+        redis=$(get_config REDIS_HOST)
+        redis_pass=$(get_config REDIS_PASS)
+        echo $redis
+        echo $redis_pass
         read -p "do you want to change [Yn] " yesno
-        if [ $yesno = "Y" ]; then
+        if [ $yesno = "y" ]; then
             read -p "enter host : " host
-            set_config_gateway $gatewayId REDIS_HOST $host
             read -p "enter pass : " pass
-            set_config_gateway $gatewayId REDIS_PASS $pass
-            if [ $host = "redis" ]; then
-                set_config_gateway $gatewayId MODE single
+
+            set_config REDIS_HOST $host
+            redis_host_ssh=$(echo $host | sed 's/:/#/g')
+            set_config REDIS_HOST_SSH $redis_host_ssh
+            set_config REDIS_PASS $pass
+
+            if [ $host = "redis:6379" ]; then
+                set_config MODE single
             else
-                set_config_gateway $gatewayId MODE cluster
+                set_config MODE cluster
             fi
+            info "please restart ferrumgate"
 
         fi
     fi
@@ -304,7 +326,8 @@ main() {
     start-gateway:,\
     stop-gateway:,\
     delete-gateway:,\
-    config:\' -- "$@") || exit
+    create-gateway,\
+    config:' -- "$@") || exit
     eval "set -- $ARGS"
     local service_name=''
     local gateway_id=''
@@ -385,8 +408,13 @@ main() {
             shift 2
             break
             ;;
-        -c | --config)
+        --create-gateway)
             opt=14
+            shift
+            break
+            ;;
+        -c | --config)
+            opt=15
             parameter_name="$2"
             shift 2
             break
@@ -419,7 +447,8 @@ main() {
     [ $opt -eq 11 ] && start_gateway $gateway_id && exit 0
     [ $opt -eq 12 ] && stop_gateway $gateway_id && exit 0
     [ $opt -eq 13 ] && delete_gateway $gateway_id && exit 0
-    [ $opt -eq 14 ] && config_gateway $gateway_id $parameter_name && exit 0
+    [ $opt -eq 14 ] && create_gateway && exit 0
+    [ $opt -eq 15 ] && config $parameter_name && exit 0
 
 }
 
