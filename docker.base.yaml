@@ -91,7 +91,7 @@ services:
     image: elasticsearch:8.5.0
     restart: always
     environment:
-      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+      - ES_JAVA_OPTS=-Xms128m -Xmx1g
       - ELASTIC_PASSWORD=${ES_PASS}
       - discovery.type=single-node
       - xpack.security.enabled=true

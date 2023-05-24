@@ -123,9 +123,15 @@ ensure_root() {
     fi
 
 }
+is_gateway_yaml() {
+    result=$(echo $1 | grep -E "gateway\.\w+\.yaml" || true)
+    echo $result
+}
+
 find_default_gateway() {
     for file in $(ls $ETC_DIR); do
-        if [[ $file = gateway.*.yaml ]]; then
+        local result=$(is_gateway_yaml $file)
+        if [ ! -z $result ]; then
             local gatewayId=$(echo "$file" | sed -e "s/gateway.//" -e "s/.yaml//")
             echo $gatewayId
             break
@@ -162,7 +168,8 @@ logs() {
 
 list_gateways() {
     for file in $(ls $ETC_DIR); do
-        if [[ $file = gateway.*.yaml ]]; then
+        local result=$(is_gateway_yaml $file)
+        if [ ! -z $result ]; then
 
             local gatewayId=$(echo "$file" | sed -e "s/gateway.//" -e "s/.yaml//")
 
@@ -186,6 +193,7 @@ delete_gateway() {
 
 create_gateway() {
     read -p "enter a port for ssh tunnel server: " port
+    ## this must be lowercase , we are using with docker compose -p
     local gateway_id=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 16 | head -n 1 | tr '[:upper:]' '[:lower:]')
     DOCKER_FILE=$ETC_DIR/gateway.$gateway_id.yaml
     rm -rf $DOCKER_FILE
@@ -197,12 +205,12 @@ create_gateway() {
 }
 
 start_base() {
-
+    info "starting base"
     docker compose -f $ETC_DIR/base.yaml --env-file $ETC_DIR/env \
         -p fg-base up -d --remove-orphans
 }
 stop_base() {
-
+    info "stoping base"
     docker compose -f $ETC_DIR/base.yaml --env-file $ETC_DIR/env \
         -p fg-base down
 }
@@ -214,6 +222,7 @@ start_gateway() {
     fi
 
     local gatewayId=$1
+    info "starting gateway $gatewayId"
     docker compose -f $ETC_DIR/gateway.$gatewayId.yaml --env-file $ETC_DIR/env \
         -p fg-$gatewayId up -d --remove-orphans
 }
@@ -221,7 +230,8 @@ start_gateway() {
 start_gateways() {
     start_base
     for file in $(ls $ETC_DIR); do
-        if [[ $file = gateway.*.yaml ]]; then
+        local result=$(is_gateway_yaml $file)
+        if [ ! -z $result ]; then
             local gatewayId=$(echo "$file" | sed -e "s/gateway.//" -e "s/.yaml//")
             start_gateway $gatewayId
         fi
@@ -236,6 +246,7 @@ stop_gateway() {
     fi
 
     local gatewayId=$1
+    info "stoping gateway $gatewayId"
     docker compose -f $ETC_DIR/gateway.$gatewayId.yaml --env-file $ETC_DIR/env \
         -p fg-$gatewayId down
 }
@@ -243,9 +254,10 @@ stop_gateway() {
 stop_gateways() {
 
     for file in $(ls $ETC_DIR); do
-        if [[ $file = *.yaml ]]; then
+        local result=$(is_gateway_yaml $file)
+        if [ ! -z $result ]; then
 
-            local gatewayId=$(echo "$file" | sed -e "s/ferrumgate.//" -e "s/.yaml//")
+            local gatewayId=$(echo "$file" | sed -e "s/gateway.//" -e "s/.yaml//")
             stop_gateway $gatewayId
         fi
     done

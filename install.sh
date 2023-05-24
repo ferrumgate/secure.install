@@ -167,6 +167,11 @@ get_config() {
     echo $value
 }
 
+is_gateway_yaml() {
+    result=$(echo $1 | grep -E "gateway\.\w+\.yaml" || true)
+    echo $result
+}
+
 main() {
     ensure_root
 
@@ -236,6 +241,7 @@ main() {
 
         GATEWAY_ID=$(get_config GATEWAY_ID)
         if [ -z $GATEWAY_ID ]; then
+            ## this must be lowercase , we are using with docker compose -p
             GATEWAY_ID=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 16 | head -n 1 | tr '[:upper:]' '[:lower:]')
         fi
 
@@ -297,6 +303,23 @@ main() {
         fi
 
         ENV_FILE_ETC=$ETC_DIR/env
+
+        ## check installed
+        allready_installed=N
+        if [ -f $ENV_FILE_ETC ]; then
+            allready_installed=Y
+            # make backup
+            rm -rf $ETC_DIR/backup
+            mkdir -p $ETC_DIR/backup
+            for file in $(ls $ETC_DIR); do
+                if [ $file != "backup" ]; then
+                    cp -r $ETC_DIR/$file $ETC_DIR/backup/
+                    info backup $file
+                fi
+            done
+
+        fi
+
         cat >$ENV_FILE_ETC <<EOF
 DEPLOY=docker
 REDIS_HOST=$REDIS_HOST
@@ -353,12 +376,29 @@ EOF
         cp -f $DOCKER_FILE $DOCKER_FILE_ETC
         chmod 600 $DOCKER_FILE_ETC
 
-        sed -i "s/??GATEWAY_ID/$GATEWAY_ID/g" $DOCKER_FILE
-        sed -i 's/??SSH_PORT/9999/g' $DOCKER_FILE
+        if [ $allready_installed = N ]; then
 
-        DOCKER_FILE_GATEWAY_ETC=$ETC_DIR/gateway.$GATEWAY_ID.yaml
-        cp -f $DOCKER_FILE $DOCKER_FILE_GATEWAY_ETC
-        chmod 600 $DOCKER_FILE_GATEWAY_ETC
+            sed -i "s/??GATEWAY_ID/$GATEWAY_ID/g" $DOCKER_FILE
+            sed -i 's/??SSH_PORT/9999/g' $DOCKER_FILE
+
+            DOCKER_FILE_GATEWAY_ETC=$ETC_DIR/gateway.$GATEWAY_ID.yaml
+            cp -f $DOCKER_FILE $DOCKER_FILE_GATEWAY_ETC
+            chmod 600 $DOCKER_FILE_GATEWAY_ETC
+        else
+            info "updating installed version"
+            for file in $(ls $ETC_DIR); do
+                result=$(is_gateway_yaml $file)
+                if [ ! -z $result ]; then
+                    local gateway_id=$(echo "$file" | sed -e "s/gateway.//" -e "s/.yaml//")
+                    local ssh_port=$(cat $ETC_DIR/$file | grep ":9999" | sed -e "s/-//g" | sed -e "s/ //g" | sed -e "s/\"//g" | cut -d":" -f1)
+                    cp $ETC_DIR/gateway.yaml $ETC_DIR/$file
+                    sed -i "s/??GATEWAY_ID/$gateway_id/g" $ETC_DIR/$file
+                    sed -i "s/??SSH_PORT/$ssh_port/g" $ETC_DIR/$file
+                    info "updated $file"
+
+                fi
+            done
+        fi
 
         info "installing services"
         install_services
@@ -370,11 +410,16 @@ EOF
         #docker node update --label-add Ferrum_Node=management $(hostname)
 
         if [ $ENV_FOR != "PROD" ]; then
-            docker compose -f $DOCKER_FILE_BASE_ETC --env-file $ENV_FILE_ETC pull
-            docker compose -f $DOCKER_FILE_BASE_ETC --env-file $ENV_FILE_ETC --profile single -p fg-base up -d --remove-orphans
 
-            docker compose -f $DOCKER_FILE_GATEWAY_ETC --env-file $ENV_FILE_ETC pull
-            docker compose -f $DOCKER_FILE_GATEWAY_ETC --env-file $ENV_FILE_ETC -p fg-${GATEWAY_ID} up -d --remove-orphans
+            docker compose -f $DOCKER_FILE_BASE_ETC --env-file $ENV_FILE_ETC pull
+            for file in $(ls $ETC_DIR); do
+                result=$(is_gateway_yaml $file)
+                if [ ! -z $result ]; then
+
+                    docker compose -f $ETC_DIR/$file --env-file $ENV_FILE_ETC pull
+                fi
+            done
+            ferrumgate --start
         fi
         info "system is ready"
 
