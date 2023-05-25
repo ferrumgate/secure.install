@@ -29,6 +29,7 @@ docker_install() {
     apt update --assume-yes
     apt install --assume-yes --no-install-recommends docker-ce docker-ce-cli containerd.io docker-compose-plugin
     cat >/etc/docker/daemon.json <<EOF
+{
         "default-address-pools" : [
     {
       "base" : "10.10.0.0/16",
