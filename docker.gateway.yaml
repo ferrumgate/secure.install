@@ -1,0 +1,180 @@
+version: "3.9"
+
+networks:
+  ferrum:
+  fg-base_ferrum:
+    external: true
+
+
+volumes:
+  redis-local:
+  ferrum:
+  lmdb:
+
+services:
+  prepare:
+    image: alpine:3.17
+    labels:
+        Ferrum_Gateway_Id: "??GATEWAY_ID"
+    command:
+      - /bin/sh
+      - -c
+      - |
+        CONF_FILE=/data/conf
+        if [ ! -f $$CONF_FILE ];then
+          echo "file does not exits"
+          echo "Ferrum_Gateway_Id: "??GATEWAY_ID""> $$CONF_FILE
+        fi
+    networks:
+      - ferrum
+    volumes:
+      - ferrum:/data
+ 
+  redis-local:
+    image: redis:7-bullseye
+    labels:
+        Ferrum_Gateway_Id: "??GATEWAY_ID"
+    command:
+      - /bin/bash
+      - -c
+      - |
+        CONF_FILE=/data/redis.conf
+        if [ ! -f $$CONF_FILE ];then
+          echo "file does not exits"
+          cat > $$CONF_FILE << EOF
+        requirepass ${REDIS_PASS}
+        protected-mode yes
+        daemonize no
+        tcp-backlog 511
+        timeout 0
+        tcp-keepalive 300
+        maxclients 100000
+        appendonly yes
+        dir /data
+        EOF
+        else
+          echo "conf file exists"
+        fi
+        redis-server $$CONF_FILE
+    restart: always
+    depends_on:
+      - prepare
+    deploy:
+      mode: global
+      restart_policy:
+        delay: 5s
+    networks:
+      - ferrum
+      - fg-base_ferrum
+    volumes:
+      - redis-local:/data
+    logging:
+      driver: local
+  
+
+  server-ssh:
+    image: "??PRIVATE_REGISTRY/ferrumgate/secure.server.ssh:1.0.0"
+    labels:
+        Ferrum_Gateway_Id: "??GATEWAY_ID"
+    restart: always
+    ports:
+      - "??SSH_PORT:9999"
+    environment:
+      - REDIS_HOST=${REDIS_HOST_SSH}
+      - REDIS_PASS=${REDIS_PASS}
+      - PORT=9999
+      - GATEWAY_ID=??GATEWAY_ID
+    cap_add:
+      - NET_ADMIN
+    extra_hosts:
+      - "registry.ferrumgate.zero:192.168.88.40"
+    deploy:
+      mode: global
+      restart_policy:
+        delay: 5s
+    depends_on:
+      - prepare
+    volumes:
+      - /dev/net/tun:/dev/net/tun
+      - /dev/urandom:/dev/urandom
+      - ferrum:/etc/ferrumgate
+    networks:
+      - ferrum
+      - fg-base_ferrum
+    logging:
+      driver: local
+
+  admin:
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.admin:1.9.0"
+    labels:
+        Ferrum_Gateway_Id: "??GATEWAY_ID"
+    restart: always
+    privileged: true
+    #cap_add:
+    #  - NET_ADMIN
+    #  - MKNOD
+    environment:
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PASS=${REDIS_PASS}
+      - REDIS_LOCAL_HOST=${REDIS_LOCAL_HOST}
+      - REDIS_LOCAL_PASS=${REDIS_LOCAL_PASS}
+      - FERRUM_IO_IMAGE=??PRIVATE_REGISTRY/ferrumgate/ferrum.io:1.3.0
+      - ENCRYPT_KEY=${ENCRYPT_KEY}
+      - GATEWAY_ID=??GATEWAY_ID
+      - ES_HOST=${ES_HOST}
+      - ES_USER=${ES_USER}
+      - ES_PASS=${ES_PASS}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - SYSLOG_HOST=log:9292
+    depends_on:
+      - prepare
+      - server-ssh
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        delay: 5s
+    volumes:
+      - ferrum:/etc/ferrumgate
+      - lmdb:/var/lib/ferrumgate
+      - /etc/docker:/etc/docker
+      - /var/run/docker.sock:/var/run/docker.sock
+    network_mode: service:server-ssh
+    logging:
+      driver: local
+ 
+  log:
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.log:1.8.0"
+    labels:
+        Ferrum_Gateway_Id: "??GATEWAY_ID"
+    restart: always
+    environment:
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PASS=${REDIS_PASS}
+      - REDIS_LOCAL_HOST=${REDIS_LOCAL_HOST}
+      - REDIS_LOCAL_PASS=${REDIS_LOCAL_PASS}
+      - ENCRYPT_KEY=${ENCRYPT_KEY}
+      - ES_HOST=${ES_HOST}
+      - ES_USER=${ES_USER}
+      - ES_PASS=${ES_PASS}
+      - GATEWAY_ID=??GATEWAY_ID
+      - LOG_LEVEL=${LOG_LEVEL}
+      - MODULE_SYSLOG=true
+      - MODULE_AUDIT_TO_ES=false
+      - MODULE_ACTIVITY_TO_ES=true
+      - MODULE_DEVICE_TO_ES=false
+      - MODULE_ACTIVITY_SVC_PARSER=true
+    depends_on:
+      - prepare
+    deploy:
+      mode: global
+      restart_policy:
+        delay: 5s
+    networks:
+      - ferrum
+      - fg-base_ferrum
+    logging:
+      driver: local
+
+ 
+ 

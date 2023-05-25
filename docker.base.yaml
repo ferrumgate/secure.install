@@ -1,0 +1,210 @@
+version: "3.9"
+
+networks:
+  ferrum:
+
+volumes:
+  redis:
+  redis-local-base:
+  es:
+
+
+services:
+  redis:
+    image: redis:7-bullseye
+    command:
+      - /bin/bash
+      - -c
+      - |
+        CONF_FILE=/data/redis.conf
+        if [ ! -f $$CONF_FILE ];then
+          echo "file does not exits"
+          cat > $$CONF_FILE << EOF
+        requirepass ${REDIS_PASS}
+        protected-mode yes
+        daemonize no
+        tcp-backlog 511
+        timeout 0
+        tcp-keepalive 300
+        maxclients 100000
+        appendonly yes
+        dir /data
+        EOF
+        else
+          echo "conf file exists"
+        fi
+        redis-server $$CONF_FILE
+    restart: always
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        delay: 5s
+      placement:
+        constraints:
+          - Ferrum_Node=management
+    networks:
+      - ferrum
+    volumes:
+      - redis:/data
+    logging:
+      driver: local
+
+  redis-local-base:
+    image: redis:7-bullseye
+    command:
+      - /bin/bash
+      - -c
+      - |
+        CONF_FILE=/data/redis.conf
+        if [ ! -f $$CONF_FILE ];then
+          echo "file does not exits"
+          cat > $$CONF_FILE << EOF
+        requirepass ${REDIS_PASS}
+        protected-mode yes
+        daemonize no
+        tcp-backlog 511
+        timeout 0
+        tcp-keepalive 300
+        maxclients 100000
+        appendonly yes
+        dir /data
+        EOF
+        else
+          echo "conf file exists"
+        fi
+        redis-server $$CONF_FILE
+    restart: always
+    deploy:
+      mode: global
+      restart_policy:
+        delay: 5s
+    networks:
+      - ferrum
+    volumes:
+      - redis-local-base:/data
+    logging:
+      driver: local
+
+
+  es:
+    image: elasticsearch:8.5.0
+    restart: always
+    environment:
+      - ES_JAVA_OPTS=-Xms128m -Xmx1g
+      - ELASTIC_PASSWORD=${ES_PASS}
+      - discovery.type=single-node
+      - xpack.security.enabled=true
+      - xpack.ml.enabled=false
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        delay: 5s
+      placement:
+        constraints:
+          - Ferrum_Node=management
+    mem_limit: 2073741824
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    networks:
+      - ferrum
+    volumes:
+      - es:/usr/share/elasticsearch/data
+    logging:
+      driver: local
+
+  ui:
+    image: "??PRIVATE_REGISTRY/ferrumgate/ui.portal:1.9.0"
+    restart: always
+    deploy:
+      mode: global
+      restart_policy:
+        delay: 5s
+    networks:
+      - ferrum
+    logging:
+      driver: local
+
+  rest:
+    image: "??PRIVATE_REGISTRY/ferrumgate/rest.portal:1.9.0"
+    restart: always
+    ports:
+      - ${REST_HTTP_PORT}:8181
+      - ${REST_HTTPS_PORT}:8443
+    environment:
+      - PORT=8181
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PASS=${REDIS_PASS}
+      - REDIS_LOCAL_HOST=${REDIS_LOCAL_BASE_HOST}
+      - REDIS_LOCAL_PASS=${REDIS_LOCAL_PASS}
+      - BASE_RATE_LIMIT=25
+      - ENCRYPT_KEY=${ENCRYPT_KEY}
+      - ES_HOST=${ES_HOST}
+      - ES_USER=${ES_USER}
+      - ES_PASS=${ES_PASS}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - STATIC_FOLDER=/usr/src/app/web
+      - UI_HOST=ui:80
+    deploy:
+      restart_policy:
+        delay: 5s
+      mode: global
+    networks:
+      - ferrum
+    logging:
+      driver: local
+
+  log-base:
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.log:1.8.0"
+    restart: always
+    environment:
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PASS=${REDIS_PASS}
+      - REDIS_LOCAL_HOST=${REDIS_LOCAL_BASE_HOST}
+      - REDIS_LOCAL_PASS=${REDIS_LOCAL_PASS}
+      - ENCRYPT_KEY=${ENCRYPT_KEY}
+      - ES_HOST=${ES_HOST}
+      - ES_USER=${ES_USER}
+      - ES_PASS=${ES_PASS}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - MODULE_SYSLOG=false
+      - MODULE_AUDIT_TO_ES=true
+      - MODULE_ACTIVITY_TO_ES=false
+      - MODULE_DEVICE_TO_ES=true
+      - MODULE_ACTIVITY_SVC_PARSER=false
+    deploy:
+      mode: global
+      restart_policy:
+        delay: 5s
+    networks:
+      - ferrum
+    logging:
+      driver: local
+ 
+  task:
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.task:1.4.0"
+    restart: always
+    environment:
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PASS=${REDIS_PASS}
+      - REDIS_LOCAL_HOST=${REDIS_LOCAL_BASE_HOST}
+      - REDIS_LOCAL_PASS=${REDIS_LOCAL_PASS}
+      - ENCRYPT_KEY=${ENCRYPT_KEY}
+      - ES_HOST=${ES_HOST}
+      - ES_USER=${ES_USER}
+      - ES_PASS=${ES_PASS}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - MODULE_IP_INTELLIGENCE=true
+    deploy:
+      mode: global
+      restart_policy:
+        delay: 5s
+    networks:
+      - ferrum
+    logging:
+      driver: local
+
+ 
