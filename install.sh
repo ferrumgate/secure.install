@@ -158,7 +158,7 @@ get_config() {
     fi
     local key=$1
 
-    file=$ETC_DIR/ferrumgate.env
+    file=$ETC_DIR/ferrumgate/env
     if [ ! -f $file ]; then
         echo ""
         return
@@ -257,11 +257,6 @@ main() {
             REDIS_PASS=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 64 | head -n 1)
         fi
 
-        REDIS_LOCAL_HOST_BASE=$(get_config REDIS_LOCAL_HOST)
-        if [ -z $REDIS_LOCAL_HOST_BASE ]; then
-            REDIS_LOCAL_HOST_BASE=redis-local-base:6379
-        fi
-
         REDIS_LOCAL_HOST=$(get_config REDIS_LOCAL_HOST)
         if [ -z $REDIS_LOCAL_HOST ]; then
             REDIS_LOCAL_HOST=redis-local:6379
@@ -274,7 +269,7 @@ main() {
 
         REDIS_INTEL_HOST=$(get_config REDIS_INTEL_HOST)
         if [ -z $REDIS_INTEL_HOST ]; then
-            REDIS_INTEL_HOST=$REDIS_LOCAL_HOST_BASE
+            REDIS_INTEL_HOST=redis:6379
         fi
 
         REDIS_INTEL_PASS=$(get_config REDIS_INTEL_PASS)
@@ -287,29 +282,29 @@ main() {
             ES_HOST=http://es:9200
         fi
 
+        ES_USER=$(get_config ES_USER)
+        if [ -z $ES_USER ]; then
+            ES_USER=elastic
+        fi
+
         ES_PASS=$(get_config ES_PASS)
         if [ -z $ES_PASS ]; then
             ES_PASS=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 64 | head -n 1)
         fi
 
-        ES_USER=$(get_config ES_INTEL_USER)
-        if [ -z $ES_INTEL_USER ]; then
-            ES_INTEL_USER=elastic
+        ES_INTEL_HOST=$(get_config ES_INTEL_HOST)
+        if [ -z $ES_INTEL_HOST ]; then
+            ES_INTEL_HOST=http://es:9200
         fi
 
-        ES_INTEL_HOST=$(get_config ES_INTEL_HOST)
-        if [ -z $ES_HOST ]; then
-            ES_INTEL_HOST=http://es:9200
+        ES_INTEL_USER=$(get_config ES_INTEL_USER)
+        if [ -z $ES_INTEL_USER ]; then
+            ES_USER=elastic
         fi
 
         ES_INTEL_PASS=$(get_config ES_INTEL_PASS)
         if [ -z $ES_INTEL_PASS ]; then
             ES_INTEL_PASS=$ES_PASS
-        fi
-
-        ES_INTEL_USER=$(get_config ES_USER)
-        if [ -z $ES_USER ]; then
-            ES_USER=elastic
         fi
 
         ENCRYPT_KEY=$(get_config ENCRYPT_KEY)
@@ -352,7 +347,6 @@ REDIS_HOST=$REDIS_HOST
 REDIS_HOST_SSH=$REDIS_HOST_SSH
 REDIS_PASS=$REDIS_PASS
 REDIS_LOCAL_HOST=$REDIS_LOCAL_HOST
-REDIS_LOCAL_HOST_BASE=$REDIS_LOCAL_HOST_BASE
 REDIS_LOCAL_PASS=$REDIS_LOCAL_PASS
 REDIS_INTEL_HOST=$REDIS_INTEL_HOST
 REDIS_INTEL_PASS=$REDIS_INTEL_PASS

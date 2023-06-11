@@ -30,7 +30,7 @@ services:
     volumes:
       - ferrum:/data
  
-  redis-local:
+  ??GATEWAY_ID-redis-local:
     image: redis:7-bullseye
     labels:
         Ferrum_Gateway_Id: "??GATEWAY_ID"
@@ -42,7 +42,7 @@ services:
         if [ ! -f $$CONF_FILE ];then
           echo "file does not exits"
           cat > $$CONF_FILE << EOF
-        requirepass ${REDIS_PASS}
+        requirepass ${REDIS_LOCAL_PASS}
         protected-mode yes
         daemonize no
         tcp-backlog 511
@@ -116,7 +116,7 @@ services:
     environment:
       - REDIS_HOST=${REDIS_HOST}
       - REDIS_PASS=${REDIS_PASS}
-      - REDIS_LOCAL_HOST=${REDIS_LOCAL_HOST}
+      - REDIS_LOCAL_HOST=??GATEWAY_ID-${REDIS_LOCAL_HOST}
       - REDIS_LOCAL_PASS=${REDIS_LOCAL_PASS}
       - REDIS_INTEL_HOST=${REDIS_INTEL_HOST}
       - REDIS_INTEL_PASS=${REDIS_INTEL_PASS}
@@ -127,7 +127,7 @@ services:
       - ES_USER=${ES_USER}
       - ES_PASS=${ES_PASS}
       - LOG_LEVEL=${LOG_LEVEL}
-      - SYSLOG_HOST=log:9292
+      - SYSLOG_HOST=??GATEWAY_ID-log:9292
     depends_on:
       - prepare
       - server-ssh
@@ -145,7 +145,7 @@ services:
     logging:
       driver: local
  
-  log:
+  ??GATEWAY_ID-log:
     image: "??PRIVATE_REGISTRY/ferrumgate/job.log:1.9.0"
     labels:
         Ferrum_Gateway_Id: "??GATEWAY_ID"
@@ -153,7 +153,7 @@ services:
     environment:
       - REDIS_HOST=${REDIS_HOST}
       - REDIS_PASS=${REDIS_PASS}
-      - REDIS_LOCAL_HOST=${REDIS_LOCAL_HOST}
+      - REDIS_LOCAL_HOST=${REDIS_LOCAL_HOST}-??GATEWAY_ID
       - REDIS_LOCAL_PASS=${REDIS_LOCAL_PASS}
       - ENCRYPT_KEY=${ENCRYPT_KEY}
       - ES_HOST=${ES_HOST}
