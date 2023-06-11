@@ -149,6 +149,7 @@ logs() {
 
     if [ $service = "rest" ]; then
         grepname=fg-base
+        service="rest.portal"
     fi
     if [ $service = "redis" ]; then
         grepname=fg-base
@@ -158,9 +159,17 @@ logs() {
     fi
     if [ $service = "task" ]; then
         grepname=fg-base
+        service="job.task"
     fi
     if [ $service = "log-base" ]; then
         grepname=fg-base
+    fi
+
+    if [ $service = "ssh" ]; then
+        service="server.ssh"
+    fi
+    if [ $service = "admin" ]; then
+        service="job.admin"
     fi
 
     docker ps | grep $grepname | grep $service | cut -d" " -f1 | xargs -r docker logs -f

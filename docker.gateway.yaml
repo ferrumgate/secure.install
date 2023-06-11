@@ -105,7 +105,7 @@ services:
       driver: local
 
   admin:
-    image: "??PRIVATE_REGISTRY/ferrumgate/job.admin:1.9.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.admin:1.10.0"
     labels:
         Ferrum_Gateway_Id: "??GATEWAY_ID"
     restart: always
@@ -118,6 +118,8 @@ services:
       - REDIS_PASS=${REDIS_PASS}
       - REDIS_LOCAL_HOST=${REDIS_LOCAL_HOST}
       - REDIS_LOCAL_PASS=${REDIS_LOCAL_PASS}
+      - REDIS_INTEL_HOST=${REDIS_INTEL_HOST}
+      - REDIS_INTEL_PASS=${REDIS_INTEL_PASS}
       - FERRUM_IO_IMAGE=??PRIVATE_REGISTRY/ferrumgate/ferrum.io:1.3.0
       - ENCRYPT_KEY=${ENCRYPT_KEY}
       - GATEWAY_ID=??GATEWAY_ID
@@ -144,7 +146,7 @@ services:
       driver: local
  
   log:
-    image: "??PRIVATE_REGISTRY/ferrumgate/job.log:1.8.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.log:1.9.0"
     labels:
         Ferrum_Gateway_Id: "??GATEWAY_ID"
     restart: always
