@@ -60,7 +60,7 @@ print_usage() {
     echo "  ferrumgate [ -t | --status ]       -> show status"
     echo "  ferrumgate [ -u | --uninstall ]    -> uninstall"
     echo "  ferrumgate [ -c | --config ] redis -> get/set config with name, redis"
-    echo "  ferrumgate [ -l | --logs ] process -> get logs of process rest, log-base, log, admin, task, ssh"
+    echo "  ferrumgate [ -l | --logs ] process -> get logs of process rest,log, parser, admin, task, ssh"
     echo "  ferrumgate [ --list-gateways ]     -> list gateways"
     echo "  ferrumgate [ --start-gateway ] 4s3a92dd023 -> start a gateway"
     echo "  ferrumgate [ --stop-gateway ] 4s3a92dd023 -> stop a gateway"
@@ -161,7 +161,10 @@ logs() {
         grepname=fg-base
         service="job.task"
     fi
-    if [ $service = "log-base" ]; then
+    if [ $service = "log" ]; then
+        grepname=fg-base
+    fi
+    if [ $service = "parser" ]; then
         grepname=fg-base
     fi
 
@@ -172,7 +175,7 @@ logs() {
         service="job.admin"
     fi
 
-    docker ps | grep $grepname | grep $service | cut -d" " -f1 | xargs -r docker logs -f
+    docker ps | grep $grepname | grep $service | cut -d" " -f1 | head -n1 | xargs -r docker logs -f
 }
 
 list_gateways() {

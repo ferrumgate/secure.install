@@ -7,7 +7,6 @@ networks:
 
 
 volumes:
-  redis-local:
   ferrum:
   lmdb:
 
@@ -30,47 +29,6 @@ services:
     volumes:
       - ferrum:/data
  
-  ??GATEWAY_ID-redis-local:
-    image: redis:7-bullseye
-    labels:
-        Ferrum_Gateway_Id: "??GATEWAY_ID"
-    command:
-      - /bin/bash
-      - -c
-      - |
-        CONF_FILE=/data/redis.conf
-        if [ ! -f $$CONF_FILE ];then
-          echo "file does not exits"
-          cat > $$CONF_FILE << EOF
-        requirepass ${REDIS_LOCAL_PASS}
-        protected-mode yes
-        daemonize no
-        tcp-backlog 511
-        timeout 0
-        tcp-keepalive 300
-        maxclients 100000
-        appendonly yes
-        dir /data
-        EOF
-        else
-          echo "conf file exists"
-        fi
-        redis-server $$CONF_FILE
-    restart: always
-    depends_on:
-      - prepare
-    deploy:
-      mode: global
-      restart_policy:
-        delay: 5s
-    networks:
-      - ferrum
-      - fg-base_ferrum
-    volumes:
-      - redis-local:/data
-    logging:
-      driver: local
-  
 
   server-ssh:
     image: "??PRIVATE_REGISTRY/ferrumgate/secure.server.ssh:1.0.0"
@@ -116,7 +74,7 @@ services:
     environment:
       - REDIS_HOST=${REDIS_HOST}
       - REDIS_PASS=${REDIS_PASS}
-      - REDIS_LOCAL_HOST=??GATEWAY_ID-${REDIS_LOCAL_HOST}
+      - REDIS_LOCAL_HOST=${REDIS_LOCAL_HOST}
       - REDIS_LOCAL_PASS=${REDIS_LOCAL_PASS}
       - REDIS_INTEL_HOST=${REDIS_INTEL_HOST}
       - REDIS_INTEL_PASS=${REDIS_INTEL_PASS}
@@ -127,7 +85,7 @@ services:
       - ES_USER=${ES_USER}
       - ES_PASS=${ES_PASS}
       - LOG_LEVEL=${LOG_LEVEL}
-      - SYSLOG_HOST=??GATEWAY_ID-log:9292
+      - SYSLOG_HOST=log:9292
     depends_on:
       - prepare
       - server-ssh
@@ -145,38 +103,4 @@ services:
     logging:
       driver: local
  
-  ??GATEWAY_ID-log:
-    image: "??PRIVATE_REGISTRY/ferrumgate/job.log:1.9.0"
-    labels:
-        Ferrum_Gateway_Id: "??GATEWAY_ID"
-    restart: always
-    environment:
-      - REDIS_HOST=${REDIS_HOST}
-      - REDIS_PASS=${REDIS_PASS}
-      - REDIS_LOCAL_HOST=${REDIS_LOCAL_HOST}-??GATEWAY_ID
-      - REDIS_LOCAL_PASS=${REDIS_LOCAL_PASS}
-      - ENCRYPT_KEY=${ENCRYPT_KEY}
-      - ES_HOST=${ES_HOST}
-      - ES_USER=${ES_USER}
-      - ES_PASS=${ES_PASS}
-      - GATEWAY_ID=??GATEWAY_ID
-      - LOG_LEVEL=${LOG_LEVEL}
-      - MODULE_SYSLOG=true
-      - MODULE_AUDIT_TO_ES=false
-      - MODULE_ACTIVITY_TO_ES=true
-      - MODULE_DEVICE_TO_ES=false
-      - MODULE_ACTIVITY_SVC_PARSER=true
-    depends_on:
-      - prepare
-    deploy:
-      mode: global
-      restart_policy:
-        delay: 5s
-    networks:
-      - ferrum
-      - fg-base_ferrum
-    logging:
-      driver: local
-
- 
- 
+  

@@ -158,7 +158,7 @@ get_config() {
     fi
     local key=$1
 
-    file=$ETC_DIR/ferrumgate/env
+    file=$ETC_DIR/env
     if [ ! -f $file ]; then
         echo ""
         return
@@ -299,7 +299,7 @@ main() {
 
         ES_INTEL_USER=$(get_config ES_INTEL_USER)
         if [ -z $ES_INTEL_USER ]; then
-            ES_USER=elastic
+            ES_INTEL_USER=elastic
         fi
 
         ES_INTEL_PASS=$(get_config ES_INTEL_PASS)
@@ -318,6 +318,16 @@ main() {
             MODE=single
         fi
 
+        LOG_REPLICAS=$(get_config LOG_REPLICAS)
+        if [ -z $LOG_REPLICAS ]; then
+            LOG_REPLICAS=1
+        fi
+
+        LOG_PARSER_REPLICAS=$(get_config LOG_PARSER_REPLICAS)
+        if [ -z $LOG_PARSER_REPLICAS ]; then
+            LOG_PARSER_REPLICAS=1
+        fi
+
         #SSL_FILE=$(create_certificates)
         #SSL_PUB=$(cat ${SSL_FILE}.crt | base64 -w 0)
         #SSL_KEY=$(cat ${SSL_FILE}.key | base64 -w 0)
@@ -330,14 +340,18 @@ main() {
         if [ -f $ENV_FILE_ETC ]; then
             allready_installed=Y
             # make backup
-            rm -rf $ETC_DIR/backup
-            mkdir -p $ETC_DIR/backup
-            for file in $(ls $ETC_DIR); do
+            BACKUP_FOLDER=$ETC_DIR/backup/$(date +%Y-%m-%d-%H-%M-%S)
+            rm -rf $BACKUP_FOLDER
+            mkdir -p $BACKUP_FOLDER
+            for file in $(ls $ETC_DIR | grep -v -e backup); do
                 if [ $file != "backup" ]; then
-                    cp -r $ETC_DIR/$file $ETC_DIR/backup/
+                    cp -r $ETC_DIR/$file $BACKUP_FOLDER
                     info backup $file
                 fi
             done
+            if [ -f /usr/local/bin/ferrumgate ]; then
+                cp /usr/local/bin/ferrumgate $BACKUP_FOLDER
+            fi
 
         fi
 
@@ -360,6 +374,8 @@ ES_INTEL_PASS=$ES_INTEL_PASS
 LOG_LEVEL=$LOG_LEVEL
 REST_HTTP_PORT=80
 REST_HTTPS_PORT=443
+LOG_REPLICAS=$LOG_REPLICAS
+LOG_PARSER_REPLICAS=$LOG_PARSER_REPLICAS
 EOF
 
         chmod 600 $ENV_FILE_ETC
