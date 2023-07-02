@@ -35,8 +35,7 @@ docker_install() {
       "base" : "10.10.0.0/16",
       "size" : 24
     }
-  ],
-  "default-ulimits": { "nofile": { "Name": "nofile", "Hard": 1048576, "Soft": 1048576 },"memlock":{"Name":"memlock","Hard":-1,"Soft":-1} }
+  ]
     }
 EOF
     info "installed docker"
