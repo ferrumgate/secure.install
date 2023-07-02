@@ -40,7 +40,8 @@ prerequities() {
         lsb-release \
         wireguard \
         ipcalc \
-        net-tools
+        net-tools \
+        sysstat
 
     ####
     info "load ipvs modules, and netfilter modules"
@@ -70,4 +71,32 @@ EOF
     modprobe -- ip_vs_nq
     modprobe -- nf_conntrack
     modprobe -- fuse
+
+    LIMITS_FILE=/etc/security/limits.conf
+    SOFT_LIMIT=$(cat $LIMITS_FILE | grep "root soft nofile 1048576" | grep -v "#" | wc -l)
+    if [ $SOFT_LIMIT -eq "0" ]; then
+        echo "root soft nofile 1048576" >>$LIMITS_FILE
+    fi
+    HARD_LIMIT=$(cat $LIMITS_FILE | grep "root hard nofile 1048576" | grep -v "#" | wc -l)
+    if [ $HARD_LIMIT -eq "0" ]; then
+        echo "root hard nofile 1048576" >>$LIMITS_FILE
+    fi
+    SOFT_LIMIT=$(cat $LIMITS_FILE | grep "* soft nofile 1048576" | grep -v "#" | wc -l)
+    if [ $SOFT_LIMIT -eq "0" ]; then
+        echo "* soft nofile 1048576" >>$LIMITS_FILE
+    fi
+    HARD_LIMIT=$(cat $LIMITS_FILE | grep "* hard nofile 1048576" | grep -v "#" | wc -l)
+    if [ $HARD_LIMIT -eq "0" ]; then
+        echo "* hard nofile 1048576" >>$LIMITS_FILE
+    fi
+    ulimit -Sn 1048576
+    ulimit -Hn 1048576
+
+    SYSCTL_FILE=/etc/sysctl.d/99-sysctl.conf
+    INOTIFY_USER_LIMIT=$(cat $SYSCTL_FILE | grep "fs.inotify.max_user_instances = 1024" | grep -v "#" | wc -l)
+    if [ $INOTIFY_USER_LIMIT -eq "0" ]; then
+        echo "fs.inotify.max_user_instances = 1024" >>$SYSCTL_FILE
+    fi
+    sysctl -p
+
 }

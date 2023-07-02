@@ -239,6 +239,12 @@ main() {
             LOG_LEVEL=info
         fi
 
+        DEPLOY_ID=$(get_config DEPLOY_ID)
+        if [ -z $DEPLOY_ID ]; then
+            ## this must be lowercase , we are using with docker compose -p
+            DEPLOY_ID=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 16 | head -n 1 | tr '[:upper:]' '[:lower:]')
+        fi
+
         GATEWAY_ID=$(get_config GATEWAY_ID)
         if [ -z $GATEWAY_ID ]; then
             ## this must be lowercase , we are using with docker compose -p
@@ -357,6 +363,7 @@ main() {
 
         cat >$ENV_FILE_ETC <<EOF
 DEPLOY=docker
+DEPLOY_ID=$DEPLOY_ID
 REDIS_HOST=$REDIS_HOST
 REDIS_HOST_SSH=$REDIS_HOST_SSH
 REDIS_PASS=$REDIS_PASS

@@ -14,7 +14,7 @@ services:
   prepare:
     image: alpine:3.17
     labels:
-        Ferrum_Gateway_Id: "??GATEWAY_ID"
+        FerrumGatewayId: "??GATEWAY_ID"
     command:
       - /bin/sh
       - -c
@@ -22,7 +22,7 @@ services:
         CONF_FILE=/data/conf
         if [ ! -f $$CONF_FILE ];then
           echo "file does not exits"
-          echo "Ferrum_Gateway_Id: "??GATEWAY_ID""> $$CONF_FILE
+          echo "FerrumGatewayId: "??GATEWAY_ID""> $$CONF_FILE
         fi
     networks:
       - ferrum
@@ -33,7 +33,7 @@ services:
   server-ssh:
     image: "??PRIVATE_REGISTRY/ferrumgate/secure.server.ssh:1.0.0"
     labels:
-        Ferrum_Gateway_Id: "??GATEWAY_ID"
+        FerrumGatewayId: "??GATEWAY_ID"
     restart: always
     ports:
       - "??SSH_PORT:9999"
@@ -65,7 +65,7 @@ services:
   admin:
     image: "??PRIVATE_REGISTRY/ferrumgate/job.admin:1.10.0"
     labels:
-        Ferrum_Gateway_Id: "??GATEWAY_ID"
+        FerrumGatewayId: "??GATEWAY_ID"
     restart: always
     privileged: true
     #cap_add:
@@ -78,7 +78,7 @@ services:
       - REDIS_LOCAL_PASS=${REDIS_LOCAL_PASS}
       - REDIS_INTEL_HOST=${REDIS_INTEL_HOST}
       - REDIS_INTEL_PASS=${REDIS_INTEL_PASS}
-      - FERRUM_IO_IMAGE=??PRIVATE_REGISTRY/ferrumgate/ferrum.io:1.3.0
+      - FERRUM_IO_IMAGE=??PRIVATE_REGISTRY/ferrumgate/ferrum.io:1.4.0
       - ENCRYPT_KEY=${ENCRYPT_KEY}
       - GATEWAY_ID=??GATEWAY_ID
       - ES_HOST=${ES_HOST}
@@ -86,6 +86,7 @@ services:
       - ES_PASS=${ES_PASS}
       - LOG_LEVEL=${LOG_LEVEL}
       - SYSLOG_HOST=log:9292
+      - DB_FOLDER=/var/lib/ferrumgate/db
     depends_on:
       - prepare
       - server-ssh
