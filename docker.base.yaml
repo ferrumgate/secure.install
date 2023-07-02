@@ -50,7 +50,7 @@ services:
     logging:
       driver: local
 
-  redis-local-base:
+  redis-local:
     image: redis:7-bullseye
     command:
       - /bin/bash
@@ -117,7 +117,7 @@ services:
       driver: local
 
   ui:
-    image: "??PRIVATE_REGISTRY/ferrumgate/ui.portal:1.9.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/ui.portal:1.10.0"
     restart: always
     deploy:
       mode: global
@@ -129,7 +129,7 @@ services:
       driver: local
 
   rest:
-    image: "??PRIVATE_REGISTRY/ferrumgate/rest.portal:1.9.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/rest.portal:1.10.0"
     restart: always
     ports:
       - ${REST_HTTP_PORT}:8181
@@ -138,13 +138,18 @@ services:
       - PORT=8181
       - REDIS_HOST=${REDIS_HOST}
       - REDIS_PASS=${REDIS_PASS}
-      - REDIS_LOCAL_HOST=${REDIS_LOCAL_BASE_HOST}
+      - REDIS_LOCAL_HOST=${REDIS_LOCAL_HOST}
       - REDIS_LOCAL_PASS=${REDIS_LOCAL_PASS}
+      - REDIS_INTEL_HOST=${REDIS_INTEL_HOST}
+      - REDIS_INTEL_PASS=${REDIS_INTEL_PASS}
       - BASE_RATE_LIMIT=25
       - ENCRYPT_KEY=${ENCRYPT_KEY}
       - ES_HOST=${ES_HOST}
       - ES_USER=${ES_USER}
       - ES_PASS=${ES_PASS}
+      - ES_INTEL_HOST=${ES_INTEL_HOST}
+      - ES_INTEL_USER=${ES_INTEL_USER}
+      - ES_INTEL_PASS=${ES_INTEL_PASS}
       - LOG_LEVEL=${LOG_LEVEL}
       - STATIC_FOLDER=/usr/src/app/web
       - UI_HOST=ui:80
@@ -157,13 +162,42 @@ services:
     logging:
       driver: local
 
-  log-base:
-    image: "??PRIVATE_REGISTRY/ferrumgate/job.log:1.8.0"
+  log:
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.log:1.9.0"
     restart: always
     environment:
       - REDIS_HOST=${REDIS_HOST}
       - REDIS_PASS=${REDIS_PASS}
-      - REDIS_LOCAL_HOST=${REDIS_LOCAL_BASE_HOST}
+      - REDIS_LOCAL_HOST=${REDIS_LOCAL_HOST}
+      - REDIS_LOCAL_PASS=${REDIS_LOCAL_PASS}
+      - ENCRYPT_KEY=${ENCRYPT_KEY}
+      - ES_HOST=${ES_HOST}
+      - ES_USER=${ES_USER}
+      - ES_PASS=${ES_PASS}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - MODULE_SYSLOG=true
+      - MODULE_AUDIT_TO_ES=false
+      - MODULE_ACTIVITY_TO_ES=false
+      - MODULE_DEVICE_TO_ES=false
+      - MODULE_ACTIVITY_SVC_PARSER=false
+    deploy:
+      mode: replicated
+      replicas: ${LOG_REPLICAS}
+      endpoint_mode: vip
+      restart_policy:
+        delay: 5s
+    networks:
+      - ferrum
+    logging:
+      driver: local
+
+  log-parser:
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.log:1.9.0"
+    restart: always
+    environment:
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PASS=${REDIS_PASS}
+      - REDIS_LOCAL_HOST=${REDIS_LOCAL_HOST}
       - REDIS_LOCAL_PASS=${REDIS_LOCAL_PASS}
       - ENCRYPT_KEY=${ENCRYPT_KEY}
       - ES_HOST=${ES_HOST}
@@ -172,32 +206,40 @@ services:
       - LOG_LEVEL=${LOG_LEVEL}
       - MODULE_SYSLOG=false
       - MODULE_AUDIT_TO_ES=true
-      - MODULE_ACTIVITY_TO_ES=false
+      - MODULE_ACTIVITY_TO_ES=true
       - MODULE_DEVICE_TO_ES=true
-      - MODULE_ACTIVITY_SVC_PARSER=false
+      - MODULE_ACTIVITY_SVC_PARSER=true
     deploy:
-      mode: global
+      mode: replicated
+      replicas: ${LOG_PARSER_REPLICAS}
+      endpoint_mode: vip
       restart_policy:
         delay: 5s
     networks:
       - ferrum
     logging:
-      driver: local
+      driver: local      
  
   task:
-    image: "??PRIVATE_REGISTRY/ferrumgate/job.task:1.4.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.task:1.5.0"
     restart: always
     environment:
       - REDIS_HOST=${REDIS_HOST}
       - REDIS_PASS=${REDIS_PASS}
-      - REDIS_LOCAL_HOST=${REDIS_LOCAL_BASE_HOST}
+      - REDIS_LOCAL_HOST=${REDIS_LOCAL_HOST}
       - REDIS_LOCAL_PASS=${REDIS_LOCAL_PASS}
+      - REDIS_INTEL_HOST=${REDIS_INTEL_HOST}
+      - REDIS_INTEL_PASS=${REDIS_INTEL_PASS}
       - ENCRYPT_KEY=${ENCRYPT_KEY}
       - ES_HOST=${ES_HOST}
       - ES_USER=${ES_USER}
       - ES_PASS=${ES_PASS}
+      - ES_INTEL_HOST=${ES_INTEL_HOST}
+      - ES_INTEL_USER=${ES_INTEL_USER}
+      - ES_INTEL_PASS=${ES_INTEL_PASS}
       - LOG_LEVEL=${LOG_LEVEL}
       - MODULE_IP_INTELLIGENCE=true
+      - MODULE_FQDN_INTELLIGENCE=true
     deploy:
       mode: global
       restart_policy:

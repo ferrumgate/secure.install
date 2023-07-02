@@ -94,7 +94,7 @@ download() {
     # Abort if download command failed
     [ $? -eq 0 ] || fatal 'Download failed'
 }
-VERSION=1.9.0
+VERSION=1.10.0
 download_and_verify() {
     info "installing version $VERSION"
     [ "$ENV_FOR" != "PROD" ] && return 0
@@ -158,7 +158,7 @@ get_config() {
     fi
     local key=$1
 
-    file=$ETC_DIR/ferrumgate.env
+    file=$ETC_DIR/env
     if [ ! -f $file ]; then
         echo ""
         return
@@ -239,6 +239,12 @@ main() {
             LOG_LEVEL=info
         fi
 
+        DEPLOY_ID=$(get_config DEPLOY_ID)
+        if [ -z $DEPLOY_ID ]; then
+            ## this must be lowercase , we are using with docker compose -p
+            DEPLOY_ID=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 16 | head -n 1 | tr '[:upper:]' '[:lower:]')
+        fi
+
         GATEWAY_ID=$(get_config GATEWAY_ID)
         if [ -z $GATEWAY_ID ]; then
             ## this must be lowercase , we are using with docker compose -p
@@ -257,9 +263,34 @@ main() {
             REDIS_PASS=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 64 | head -n 1)
         fi
 
+        REDIS_LOCAL_HOST=$(get_config REDIS_LOCAL_HOST)
+        if [ -z $REDIS_LOCAL_HOST ]; then
+            REDIS_LOCAL_HOST=redis-local:6379
+        fi
+
+        REDIS_LOCAL_PASS=$(get_config REDIS_LOCAL_PASS)
+        if [ -z $REDIS_LOCAL_PASS ]; then
+            REDIS_LOCAL_PASS=$REDIS_PASS
+        fi
+
+        REDIS_INTEL_HOST=$(get_config REDIS_INTEL_HOST)
+        if [ -z $REDIS_INTEL_HOST ]; then
+            REDIS_INTEL_HOST=redis:6379
+        fi
+
+        REDIS_INTEL_PASS=$(get_config REDIS_INTEL_PASS)
+        if [ -z $REDIS_INTEL_PASS ]; then
+            REDIS_INTEL_PASS=$REDIS_PASS
+        fi
+
         ES_HOST=$(get_config ES_HOST)
         if [ -z $ES_HOST ]; then
             ES_HOST=http://es:9200
+        fi
+
+        ES_USER=$(get_config ES_USER)
+        if [ -z $ES_USER ]; then
+            ES_USER=elastic
         fi
 
         ES_PASS=$(get_config ES_PASS)
@@ -267,9 +298,19 @@ main() {
             ES_PASS=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 64 | head -n 1)
         fi
 
-        ES_USER=$(get_config ES_USER)
-        if [ -z $ES_USER ]; then
-            ES_USER=elastic
+        ES_INTEL_HOST=$(get_config ES_INTEL_HOST)
+        if [ -z $ES_INTEL_HOST ]; then
+            ES_INTEL_HOST=http://es:9200
+        fi
+
+        ES_INTEL_USER=$(get_config ES_INTEL_USER)
+        if [ -z $ES_INTEL_USER ]; then
+            ES_INTEL_USER=elastic
+        fi
+
+        ES_INTEL_PASS=$(get_config ES_INTEL_PASS)
+        if [ -z $ES_INTEL_PASS ]; then
+            ES_INTEL_PASS=$ES_PASS
         fi
 
         ENCRYPT_KEY=$(get_config ENCRYPT_KEY)
@@ -283,24 +324,20 @@ main() {
             MODE=single
         fi
 
-        REDIS_LOCAL_HOST=$(get_config REDIS_LOCAL_HOST)
-        if [ -z $REDIS_LOCAL_HOST ]; then
-            REDIS_LOCAL_HOST=redis-local:6379
+        LOG_REPLICAS=$(get_config LOG_REPLICAS)
+        if [ -z $LOG_REPLICAS ]; then
+            LOG_REPLICAS=1
+        fi
+
+        LOG_PARSER_REPLICAS=$(get_config LOG_PARSER_REPLICAS)
+        if [ -z $LOG_PARSER_REPLICAS ]; then
+            LOG_PARSER_REPLICAS=1
         fi
 
         #SSL_FILE=$(create_certificates)
         #SSL_PUB=$(cat ${SSL_FILE}.crt | base64 -w 0)
         #SSL_KEY=$(cat ${SSL_FILE}.key | base64 -w 0)
         #rm ${SSL_FILE}.crt && rm ${SSL_FILE}.key
-
-        if [ $ENV_FOR != "PROD" ]; then
-            GATEWAY_ID=4s6ro4xte8009p96
-            REDIS_PASS=1dpkz8g8xg6e8tfz3tv1usddjhcu1m81pjcp2ai9je08zlop73t64eis6y0thxlv
-            ES_PASS=ux4eyrkbr47z6sckyf9zmavvgzxgvrzebsh082dumfk59j3b5ti9fvy95s7sybmx
-            ENCRYPT_KEY=6ydkxusirp6jy3ahttvd6m9v84axa0xt
-            LOG_LEVEL=debug
-
-        fi
 
         ENV_FILE_ETC=$ETC_DIR/env
 
@@ -309,32 +346,43 @@ main() {
         if [ -f $ENV_FILE_ETC ]; then
             allready_installed=Y
             # make backup
-            rm -rf $ETC_DIR/backup
-            mkdir -p $ETC_DIR/backup
-            for file in $(ls $ETC_DIR); do
+            BACKUP_FOLDER=$ETC_DIR/backup/$(date +%Y-%m-%d-%H-%M-%S)
+            rm -rf $BACKUP_FOLDER
+            mkdir -p $BACKUP_FOLDER
+            for file in $(ls $ETC_DIR | grep -v -e backup); do
                 if [ $file != "backup" ]; then
-                    cp -r $ETC_DIR/$file $ETC_DIR/backup/
+                    cp -r $ETC_DIR/$file $BACKUP_FOLDER
                     info backup $file
                 fi
             done
+            if [ -f /usr/local/bin/ferrumgate ]; then
+                cp /usr/local/bin/ferrumgate $BACKUP_FOLDER
+            fi
 
         fi
 
         cat >$ENV_FILE_ETC <<EOF
 DEPLOY=docker
+DEPLOY_ID=$DEPLOY_ID
 REDIS_HOST=$REDIS_HOST
 REDIS_HOST_SSH=$REDIS_HOST_SSH
 REDIS_PASS=$REDIS_PASS
-REDIS_LOCAL_HOST=redis-local:6379
-REDIS_LOCAL_BASE_HOST=redis-local-base:6379
-REDIS_LOCAL_PASS=$REDIS_PASS
+REDIS_LOCAL_HOST=$REDIS_LOCAL_HOST
+REDIS_LOCAL_PASS=$REDIS_LOCAL_PASS
+REDIS_INTEL_HOST=$REDIS_INTEL_HOST
+REDIS_INTEL_PASS=$REDIS_INTEL_PASS
 ENCRYPT_KEY=$ENCRYPT_KEY
 ES_HOST=$ES_HOST
 ES_USER=$ES_USER
 ES_PASS=$ES_PASS
+ES_INTEL_HOST=$ES_INTEL_HOST
+ES_INTEL_USER=$ES_INTEL_USER
+ES_INTEL_PASS=$ES_INTEL_PASS
 LOG_LEVEL=$LOG_LEVEL
 REST_HTTP_PORT=80
 REST_HTTPS_PORT=443
+LOG_REPLICAS=$LOG_REPLICAS
+LOG_PARSER_REPLICAS=$LOG_PARSER_REPLICAS
 EOF
 
         chmod 600 $ENV_FILE_ETC

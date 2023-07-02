@@ -39,6 +39,8 @@ docker_install() {
     }
 EOF
     info "installed docker"
+    info "restarting docker"
+    systemctl restart docker
 }
 
 docker_bridge_create() {

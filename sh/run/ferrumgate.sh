@@ -60,12 +60,13 @@ print_usage() {
     echo "  ferrumgate [ -t | --status ]       -> show status"
     echo "  ferrumgate [ -u | --uninstall ]    -> uninstall"
     echo "  ferrumgate [ -c | --config ] redis -> get/set config with name, redis"
-    echo "  ferrumgate [ -l | --logs ] process -> get logs of process rest, log-base, log, admin, task, ssh"
+    echo "  ferrumgate [ -l | --logs ] process -> get logs of process rest,log, parser, admin, task, ssh"
     echo "  ferrumgate [ --list-gateways ]     -> list gateways"
     echo "  ferrumgate [ --start-gateway ] 4s3a92dd023 -> start a gateway"
     echo "  ferrumgate [ --stop-gateway ] 4s3a92dd023 -> stop a gateway"
     echo "  ferrumgate [ --delete-gateway ] 4s3a92dd023  -> delete a gateway"
     echo "  ferrumgate [ --create-gateway ] -> creates a new gateway"
+    echo "  ferrumgate [ --recreate-gateway ] -> recreates a gateway"
 
 }
 
@@ -149,6 +150,7 @@ logs() {
 
     if [ $service = "rest" ]; then
         grepname=fg-base
+        service="rest.portal"
     fi
     if [ $service = "redis" ]; then
         grepname=fg-base
@@ -158,12 +160,23 @@ logs() {
     fi
     if [ $service = "task" ]; then
         grepname=fg-base
+        service="task"
     fi
-    if [ $service = "log-base" ]; then
+    if [ $service = "log" ]; then
+        grepname=fg-base
+    fi
+    if [ $service = "parser" ]; then
         grepname=fg-base
     fi
 
-    docker ps | grep $grepname | grep $service | cut -d" " -f1 | xargs -r docker logs -f
+    if [ $service = "ssh" ]; then
+        service="server.ssh"
+    fi
+    if [ $service = "admin" ]; then
+        service="job.admin"
+    fi
+
+    docker ps | grep $grepname | grep $service | cut -d" " -f1 | head -n1 | xargs -r docker logs -f
 }
 
 list_gateways() {
@@ -192,9 +205,17 @@ delete_gateway() {
 }
 
 create_gateway() {
-    read -p "enter a port for ssh tunnel server: " port
+    local port=$1
+    local gateway_id=$2
+    if [ -z "$port" ]; then
+        read -p "enter a port for ssh tunnel server: " p1
+        port=$p1
+    fi
     ## this must be lowercase , we are using with docker compose -p
-    local gateway_id=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 16 | head -n 1 | tr '[:upper:]' '[:lower:]')
+
+    if [ -z $gateway_id ]; then
+        gateway_id=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 16 | head -n 1 | tr '[:upper:]' '[:lower:]')
+    fi
     DOCKER_FILE=$ETC_DIR/gateway.$gateway_id.yaml
     rm -rf $DOCKER_FILE
     cp $ETC_DIR/gateway.yaml $DOCKER_FILE
@@ -202,6 +223,13 @@ create_gateway() {
     sed -i "s/??SSH_PORT/$port/g" $DOCKER_FILE
     info "created gateway $gateway_id  at port $port"
     info "start gateway"
+}
+
+recreate_gateway() {
+    read -p "enter a port for ssh tunnel server: " port
+    ## this must be lowercase , we are using with docker compose -p
+    read -p "enter gateway id:" gateway_id
+    create_gateway $port $gateway_id
 }
 
 start_base() {
@@ -339,6 +367,7 @@ main() {
     stop-gateway:,\
     delete-gateway:,\
     create-gateway,\
+    recreate-gateway,\
     config:' -- "$@") || exit
     eval "set -- $ARGS"
     local service_name=''
@@ -425,8 +454,13 @@ main() {
             shift
             break
             ;;
-        -c | --config)
+        --recreate-gateway)
             opt=15
+            shift
+            break
+            ;;
+        -c | --config)
+            opt=16
             parameter_name="$2"
             shift 2
             break
@@ -460,7 +494,8 @@ main() {
     [ $opt -eq 12 ] && stop_gateway $gateway_id && exit 0
     [ $opt -eq 13 ] && delete_gateway $gateway_id && exit 0
     [ $opt -eq 14 ] && create_gateway && exit 0
-    [ $opt -eq 15 ] && config $parameter_name && exit 0
+    [ $opt -eq 15 ] && recreate_gateway && exit 0
+    [ $opt -eq 16 ] && config $parameter_name && exit 0
 
 }
 
