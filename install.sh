@@ -94,7 +94,7 @@ download() {
     # Abort if download command failed
     [ $? -eq 0 ] || fatal 'Download failed'
 }
-VERSION=1.10.0
+VERSION=1.11.0
 download_and_verify() {
     info "installing version $VERSION"
     [ "$ENV_FOR" != "PROD" ] && return 0
@@ -163,13 +163,24 @@ get_config() {
         echo ""
         return
     fi
-    value=$(cat $file | grep $key= | cut -d"=" -f2)
+    value=$(cat $file | grep $key= | cut -d"=" -f2-)
     echo $value
 }
 
 is_gateway_yaml() {
     result=$(echo $1 | grep -E "gateway\.\w+\.yaml" || true)
     echo $result
+}
+
+create_cluster_ip() {
+    local random=$(shuf -i 1-254 -n1)
+    echo "169.254.254.$random"
+}
+create_cluster_private_key() {
+    wg genkey | base64 -d | xxd -p -c 256
+}
+create_cluster_public_key() {
+    echo $1 | xxd -r -p | base64 | wg pubkey | base64 -d | xxd -p -c 256
 }
 
 main() {
@@ -256,6 +267,11 @@ main() {
             REDIS_HOST="redis:6379"
         fi
 
+        REDIS_HA_HOST=$(get_config REDIS_HA_HOST)
+        if [ -z $REDIS_HA_HOST ]; then
+            REDIS_HA_HOST="redis-ha:6379"
+        fi
+
         REDIS_HOST_SSH=$(echo $REDIS_HOST | sed 's/:/#/g')
 
         REDIS_PASS=$(get_config REDIS_PASS)
@@ -334,6 +350,37 @@ main() {
             LOG_PARSER_REPLICAS=1
         fi
 
+        CLUSTER_NODE_HOST=$(get_config CLUSTER_NODE_HOST)
+        if [ -z $CLUSTER_NODE_HOST ]; then
+            CLUSTER_NODE_HOST=$(hostname)
+        fi
+
+        CLUSTER_NODE_IP=$(get_config CLUSTER_NODE_IP)
+        if [ -z $CLUSTER_NODE_IP ]; then
+            CLUSTER_NODE_IP=$(create_cluster_ip)
+        fi
+
+        CLUSTER_NODE_PORT=$(get_config CLUSTER_NODE_PORT)
+        if [ -z $CLUSTER_NODE_PORT ]; then
+            CLUSTER_NODE_PORT=54321
+        fi
+
+        CLUSTER_NODE_PRIVATE_KEY=$(get_config CLUSTER_NODE_PRIVATE_KEY)
+        if [ -z $CLUSTER_NODE_PRIVATE_KEY ]; then
+            CLUSTER_NODE_PRIVATE_KEY=$(create_cluster_private_key)
+        fi
+        CLUSTER_NODE_PUBLIC_KEY=$(get_config CLUSTER_NODE_PUBLIC_KEY)
+        if [ -z $CLUSTER_NODE_PUBLIC_KEY ]; then
+            CLUSTER_NODE_PUBLIC_KEY=$(create_cluster_public_key $CLUSTER_NODE_PRIVATE_KEY)
+        fi
+
+        CLUSTER_NODE_PEERS=$(get_config CLUSTER_NODE_PEERS)
+        CLUSTER_REDIS_MASTER=$(get_config CLUSTER_REDIS_MASTER)
+        CLUSTER_REDIS_QUORUM=$(get_config CLUSTER_REDIS_QUORUM)
+        if [ -z $CLUSTER_REDIS_QUORUM ]; then
+            CLUSTER_REDIS_QUORUM=2
+        fi
+
         #SSL_FILE=$(create_certificates)
         #SSL_PUB=$(cat ${SSL_FILE}.crt | base64 -w 0)
         #SSL_KEY=$(cat ${SSL_FILE}.key | base64 -w 0)
@@ -365,7 +412,9 @@ main() {
 DEPLOY=docker
 DEPLOY_ID=$DEPLOY_ID
 REDIS_HOST=$REDIS_HOST
+REDIS_HA_HOST=$REDIS_HA_HOST
 REDIS_HOST_SSH=$REDIS_HOST_SSH
+REDIS_PROXY_HOST=
 REDIS_PASS=$REDIS_PASS
 REDIS_LOCAL_HOST=$REDIS_LOCAL_HOST
 REDIS_LOCAL_PASS=$REDIS_LOCAL_PASS
@@ -383,6 +432,16 @@ REST_HTTP_PORT=80
 REST_HTTPS_PORT=443
 LOG_REPLICAS=$LOG_REPLICAS
 LOG_PARSER_REPLICAS=$LOG_PARSER_REPLICAS
+CLUSTER_NODE_HOST=$CLUSTER_NODE_HOST
+CLUSTER_NODE_IP=$CLUSTER_NODE_IP
+CLUSTER_NODE_PORT=$CLUSTER_NODE_PORT
+CLUSTER_NODE_QUORUM=$CLUSTER_NODE_QUORUM
+CLUSTER_NODE_PRIVATE_KEY=$CLUSTER_NODE_PRIVATE_KEY
+CLUSTER_NODE_PUBLIC_KEY=$CLUSTER_NODE_PUBLIC_KEY
+CLUSTER_NODE_PEERS=$CLUSTER_NODE_PEERS
+CLUSTER_REDIS_MASTER=$CLUSTER_REDIS_MASTER
+CLUSTER_REDIS_QUORUM=$CLUSTER_REDIS_QUORUM
+
 EOF
 
         chmod 600 $ENV_FILE_ETC
@@ -467,7 +526,7 @@ EOF
                     docker compose -f $ETC_DIR/$file --env-file $ENV_FILE_ETC pull
                 fi
             done
-            ferrumgate --start
+            ferrumgate --restart
         fi
         info "system is ready"
 
