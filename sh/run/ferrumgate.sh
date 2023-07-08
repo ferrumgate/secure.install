@@ -73,8 +73,11 @@ print_usage() {
     echo "  ferrumgate [ --recreate-cluster-keys ] -> recreate cluster keys"
     echo "  ferrumgate [ --show-cluster-config ] -> show cluster config"
     echo "  ferrumgate [ --add-cluster-peer ] peerVariable -> add a peer to cluster"
-    echo "  ferrumgate [ --remove-cluster-peer ] peername -> add a peer to cluster"
+    echo "  ferrumgate [ --remove-cluster-peer ] peername -> remove peer from cluster"
     echo "  ferrumgate [ --set-cluster-config ] -> change cluster config"
+    echo "  ferrumgate [ --show-es-peers ] -> shows es peers"
+    echo "  ferrumgate [ --add-es-peer ] peerVariable -> add a peer to es ha"
+    echo "  ferrumgate [ --remove-es-peer ] peername -> remove a peer from es ha"
 
 }
 
@@ -274,6 +277,15 @@ prepare_env() {
         set_config REDIS_PROXY_HOST $redis_host
     else
         set_config REDIS_PROXY_HOST $redis_ha_host
+    fi
+
+    local es_host=$(get_config ES_HOST)
+    local es_ha_host=$(get_config ES_HA_HOST)
+    local is_es_clustered=$(get_config CLUSTER_ES_PEERS)
+    if [ -z $is_es_clustered ]; then
+        set_config ES_PROXY_HOST $es_host
+    else
+        set_config ES_PROXY_HOST $es_ha_host
     fi
 }
 
@@ -520,12 +532,12 @@ show_cluster_config() {
         echo $line
     done
     local cluster_public_ip=$CLUSTER_PUBLIC_IP
-    if [ -z $cluster_public_ip ]; then
+    if [ -z "$cluster_public_ip" ]; then
         cluster_public_ip="public_ip"
     fi
 
     local cluster_public_port=$CLUSTER_PUBLIC_PORT
-    if [ -z $cluster_public_port ]; then
+    if [ -z "$cluster_public_port" ]; then
         cluster_public_port="port"
     fi
     echo ""
@@ -582,21 +594,17 @@ remove_cluster_peer() {
     local node_ip=$(get_config CLUSTER_NODE_IP)
     local input_host=$(echo $input | cut -d'/' -f1)
 
-    if [ $input_host = $node_host ]; then
-        error "you can not add this host to peers"
-        return
-    fi
     local peer=""
     for line in $node_peers; do
         local host=$(echo $line | cut -d'/' -f1)
-        if [ $host != $input_host ] && [ $host != $input_host ]; then
+        if [ $host != "$input_host" ]; then
             peer="$peer $line"
         fi
     done
     peer="$peer $input"
 
     set_config CLUSTER_NODE_PEERS "$peer"
-    info "added to peers"
+    info "removed from peers"
 }
 
 set_cluster_config() {
@@ -650,7 +658,7 @@ set_redis_master() {
     fi
 
 }
-delete_redis_master() {
+remove_redis_master() {
     echo "current master is: $(get_config CLUSTER_REDIS_MASTER)"
     read -p "are you sure [Yn] " yesno
     if [ $yesno = "Y" ]; then
@@ -658,6 +666,86 @@ delete_redis_master() {
         info "redis master deleted"
     fi
 
+}
+
+show_es_peers() {
+    local node_host=$(get_config CLUSTER_NODE_HOST)
+    local node_ip=$(get_config CLUSTER_NODE_IP)
+
+    local node_peers=$(get_config CLUSTER_ES_PEERS)
+    echo ""
+    echo "**** current peers *****"
+    for line in $node_peers; do
+        echo $line
+    done
+
+    echo ""
+
+    echo "**** commands **********"
+    echo "PEER=\"$node_host/$node_ip\""
+    echo "ferrumgate --add-es-peer \$PEER"
+}
+
+add_es_peer() {
+    if [ $# -lt 1 ]; then
+        error "no arguments supplied"
+        exit 1
+    fi
+
+    local input=$1
+    local node_peers=$(get_config CLUSTER_ES_PEERS)
+    local node_host=$(get_config CLUSTER_NODE_HOST)
+    local node_ip=$(get_config CLUSTER_NODE_IP)
+    local input_host=$(echo $input | cut -d'/' -f1)
+
+    local peer=""
+    for line in $node_peers; do
+        local host=$(echo $line | cut -d'/' -f1)
+        if [ $host != $input_host ]; then
+            if [ -z "$peer" ]; then
+                peer="$line"
+            else
+                peer="$peer $line"
+            fi
+        fi
+    done
+
+    if [ -z "$peer" ]; then
+        peer="$input"
+    else
+        peer="$peer $input"
+    fi
+
+    set_config CLUSTER_ES_PEERS "$peer"
+    info "added to peers"
+}
+
+remove_es_peer() {
+    if [ $# -lt 1 ]; then
+        error "no arguments supplied"
+        exit 1
+    fi
+
+    local input=$1
+    local node_peers=$(get_config CLUSTER_ES_PEERS)
+    local node_host=$(get_config CLUSTER_NODE_HOST)
+    local node_ip=$(get_config CLUSTER_NODE_IP)
+    local input_host=$(echo $input | cut -d'/' -f1)
+
+    local peer=""
+    for line in $node_peers; do
+        local host=$(echo $line | cut -d'/' -f1)
+        if [ $host != $input_host ]; then
+            if [ -z "$peer" ]; then
+                peer="$line"
+            else
+                peer="$peer $line"
+            fi
+        fi
+    done
+
+    set_config CLUSTER_ES_PEERS "$peer"
+    info "removed from peers"
 }
 
 main() {
@@ -684,7 +772,10 @@ main() {
     remove-cluster-peer:,\
     set-cluster-config,\
     set-redis-master,\
-    delete-redis-master,\
+    remove-redis-master,\
+    show-es-peers,\
+    add-es-peer:,\
+    remove-es-peer:,\
     set-config:' -- "$@") || exit
     eval "set -- $ARGS"
     local service_name=''
@@ -823,13 +914,30 @@ main() {
             shift
             break
             ;;
-        --delete-redis-master)
+        --remove-redis-master)
             opt=25
             shift
             break
             ;;
-        -c | --set-config)
+        --show-es-peers)
             opt=26
+            shift
+            break
+            ;;
+        --add-es-peer)
+            opt=27
+            parameter_name="$2"
+            shift 2
+            break
+            ;;
+        --remove-es-peer)
+            opt=28
+            parameter_name="$2"
+            shift 2
+            break
+            ;;
+        -c | --set-config)
+            opt=29
             parameter_name="$2"
             shift 2
             break
@@ -873,8 +981,11 @@ main() {
     [ $opt -eq 22 ] && remove_cluster_peer $parameter_name && exit 0
     [ $opt -eq 23 ] && set_cluster_config && exit 0
     [ $opt -eq 24 ] && set_redis_master && exit 0
-    [ $opt -eq 25 ] && delete_redis_master && exit 0
-    [ $opt -eq 26 ] && config $parameter_name && exit 0
+    [ $opt -eq 25 ] && remove_redis_master && exit 0
+    [ $opt -eq 26 ] && show_es_peers && exit 0
+    [ $opt -eq 27 ] && add_es_peer $parameter_name && exit 0
+    [ $opt -eq 28 ] && remove_es_peer $parameter_name && exit 0
+    [ $opt -eq 29 ] && config $parameter_name && exit 0
 
 }
 

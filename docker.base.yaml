@@ -164,20 +164,22 @@ services:
                     tcp-check send QUIT\r\n
               tcp-check expect string +OK
         EOF
-        echo " server ${CLUSTER_NODE_HOST} ${CLUSTER_NODE_IP}:6379 check inter 3s  fall 1  rise 21" >> $$CONF_FILE
+        echo " server ${CLUSTER_NODE_HOST} ${CLUSTER_NODE_IP}:6379 check inter 3s  fall 3  rise 21" >> $$CONF_FILE
         peers="${CLUSTER_NODE_PEERS}"
-        for line in "$$peers";do
+        for line in $$peers;do
+          
           host=$$(echo $$line|cut -d'/' -f1);
           ip=$$(echo $$line|cut -d'/' -f3);
+          
           if [ ! -z $$host ] && [ ! -z $$ip ];then
-          echo " server $$host $$ip:6379 check inter 3s  fall 1  rise 21" >> $$CONF_FILE
+          echo " server $$host $$ip:6379 check inter 3s  fall 3  rise 21" >> $$CONF_FILE
           fi
 
         done
-
+        
         redis_master=${CLUSTER_REDIS_MASTER}
-        if [ ! -z $${redis_master} ];then
-        echo "starting redis-ha"
+        if [ ! -z "$$redis_master" ];then
+         echo "starting redis-ha"
          haproxy  -f haproxy.cfg
         else 
           echo "no redis cluster, closing ha"
@@ -203,6 +205,7 @@ services:
       - discovery.type=single-node
       - xpack.security.enabled=true
       - xpack.ml.enabled=false
+      - network.host=0.0.0.0
     deploy:
       mode: replicated
       replicas: 1
@@ -224,6 +227,69 @@ services:
       - es:/usr/share/elasticsearch/data
     logging:
       driver: local
+
+  es-ha:
+    image: haproxy:2.8.1-bullseye
+    command:
+      - /bin/bash
+      - -c
+      - |
+        CONF_FILE=haproxy.cfg
+          
+          cat > $$CONF_FILE << EOF
+        global
+         log stdout format raw local0
+        defaults escluster
+        mode tcp
+        timeout connect  4s
+        timeout server  30s
+        timeout client  30s
+ 
+        frontend frontend_es
+          bind :9200 name es
+          default_backend backend_es
+ 
+        backend backend_es
+        EOF
+        
+        peers="${CLUSTER_ES_PEERS}"
+        backup="";
+        for line in $$peers;do
+          host=$$(echo $$line|cut -d'/' -f1);
+          ip=$$(echo $$line|cut -d'/' -f2);
+          
+          if [ ! -z $$host ] && [ ! -z $$ip ];then
+            backup_str=""
+            if [ -z $$backup ];then
+                backup_str="";
+            else
+                backup_str="backup"
+            fi
+            backup="backup";
+            echo " server $$host $$ip:9200 check inter 3s  fall 20  rise 20 $$backup_str" >> $$CONF_FILE
+          fi
+
+        done
+
+        es_peers="${CLUSTER_ES_PEERS}"
+        if [ ! -z "$$es_peers" ];then
+         echo "starting es-ha"
+         haproxy  -f haproxy.cfg
+        else 
+          echo "no es cluster, closing ha"
+        fi
+    restart: always
+    deploy:
+      mode: global
+      restart_policy:
+        delay: 5s
+    networks:
+      - ferrum
+    depends_on:
+      - es
+    logging:
+      driver: local
+
 
   ui:
     image: "??PRIVATE_REGISTRY/ferrumgate/ui.portal:1.11.0"
@@ -253,10 +319,10 @@ services:
       - REDIS_INTEL_PASS=${REDIS_INTEL_PASS}
       - BASE_RATE_LIMIT=25
       - ENCRYPT_KEY=${ENCRYPT_KEY}
-      - ES_HOST=${ES_HOST}
+      - ES_HOST=${ES_PROXY_HOST}
       - ES_USER=${ES_USER}
       - ES_PASS=${ES_PASS}
-      - ES_INTEL_HOST=${ES_INTEL_HOST}
+      - ES_INTEL_HOST=${ES_PROXY_HOST}
       - ES_INTEL_USER=${ES_INTEL_USER}
       - ES_INTEL_PASS=${ES_INTEL_PASS}
       - LOG_LEVEL=${LOG_LEVEL}
@@ -280,7 +346,7 @@ services:
       - REDIS_LOCAL_HOST=${REDIS_LOCAL_HOST}
       - REDIS_LOCAL_PASS=${REDIS_LOCAL_PASS}
       - ENCRYPT_KEY=${ENCRYPT_KEY}
-      - ES_HOST=${ES_HOST}
+      - ES_HOST=${ES_PROXY_HOST}
       - ES_USER=${ES_USER}
       - ES_PASS=${ES_PASS}
       - LOG_LEVEL=${LOG_LEVEL}
@@ -309,7 +375,7 @@ services:
       - REDIS_LOCAL_HOST=${REDIS_LOCAL_HOST}
       - REDIS_LOCAL_PASS=${REDIS_LOCAL_PASS}
       - ENCRYPT_KEY=${ENCRYPT_KEY}
-      - ES_HOST=${ES_HOST}
+      - ES_HOST=${ES_PROXY_HOST}
       - ES_USER=${ES_USER}
       - ES_PASS=${ES_PASS}
       - LOG_LEVEL=${LOG_LEVEL}
@@ -340,10 +406,10 @@ services:
       - REDIS_INTEL_HOST=${REDIS_INTEL_HOST}
       - REDIS_INTEL_PASS=${REDIS_INTEL_PASS}
       - ENCRYPT_KEY=${ENCRYPT_KEY}
-      - ES_HOST=${ES_HOST}
+      - ES_HOST=${ES_PROXY_HOST}
       - ES_USER=${ES_USER}
       - ES_PASS=${ES_PASS}
-      - ES_INTEL_HOST=${ES_INTEL_HOST}
+      - ES_INTEL_HOST=${ES_PROXY_HOST}
       - ES_INTEL_USER=${ES_INTEL_USER}
       - ES_INTEL_PASS=${ES_INTEL_PASS}
       - LOG_LEVEL=${LOG_LEVEL}

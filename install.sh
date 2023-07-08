@@ -304,6 +304,11 @@ main() {
             ES_HOST=http://es:9200
         fi
 
+        ES_HA_HOST=$(get_config ES_HA_HOST)
+        if [ -z $ES_HA_HOST ]; then
+            ES_HA_HOST="http://es-ha:9200"
+        fi
+
         ES_USER=$(get_config ES_USER)
         if [ -z $ES_USER ]; then
             ES_USER=elastic
@@ -380,6 +385,10 @@ main() {
         if [ -z $CLUSTER_REDIS_QUORUM ]; then
             CLUSTER_REDIS_QUORUM=2
         fi
+        CLUSTER_ES_PEERS=$(get_config CLUSTER_ES_PEERS)
+        if [ -z $CLUSTER_ES_PEERS ]; then
+            CLUSTER_ES_PEERS=""
+        fi
 
         #SSL_FILE=$(create_certificates)
         #SSL_PUB=$(cat ${SSL_FILE}.crt | base64 -w 0)
@@ -422,8 +431,10 @@ REDIS_INTEL_HOST=$REDIS_INTEL_HOST
 REDIS_INTEL_PASS=$REDIS_INTEL_PASS
 ENCRYPT_KEY=$ENCRYPT_KEY
 ES_HOST=$ES_HOST
+ES_HA_HOST=$ES_HA_HOST
 ES_USER=$ES_USER
 ES_PASS=$ES_PASS
+ES_PROXY_HOST=
 ES_INTEL_HOST=$ES_INTEL_HOST
 ES_INTEL_USER=$ES_INTEL_USER
 ES_INTEL_PASS=$ES_INTEL_PASS
@@ -441,6 +452,7 @@ CLUSTER_NODE_PUBLIC_KEY=$CLUSTER_NODE_PUBLIC_KEY
 CLUSTER_NODE_PEERS=$CLUSTER_NODE_PEERS
 CLUSTER_REDIS_MASTER=$CLUSTER_REDIS_MASTER
 CLUSTER_REDIS_QUORUM=$CLUSTER_REDIS_QUORUM
+CLUSTER_ES_PEERS=$CLUSTER_ES_PEERS
 
 EOF
 

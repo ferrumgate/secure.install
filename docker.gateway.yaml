@@ -81,7 +81,7 @@ services:
       - FERRUM_IO_IMAGE=??PRIVATE_REGISTRY/ferrumgate/ferrum.io:1.4.0
       - ENCRYPT_KEY=${ENCRYPT_KEY}
       - GATEWAY_ID=??GATEWAY_ID
-      - ES_HOST=${ES_HOST}
+      - ES_HOST=${ES_PROXY_HOST}
       - ES_USER=${ES_USER}
       - ES_PASS=${ES_PASS}
       - LOG_LEVEL=${LOG_LEVEL}
