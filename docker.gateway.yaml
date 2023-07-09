@@ -31,14 +31,14 @@ services:
  
 
   server-ssh:
-    image: "??PRIVATE_REGISTRY/ferrumgate/secure.server.ssh:1.1.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/secure.server.ssh:1.0.0"
     labels:
         FerrumGatewayId: "??GATEWAY_ID"
     restart: always
     ports:
       - "??SSH_PORT:9999"
     environment:
-      - REDIS_HOST=${REDIS_PROXY_HOST}
+      - REDIS_HOST=${REDIS_HOST_SSH}
       - REDIS_PASS=${REDIS_PASS}
       - PORT=9999
       - GATEWAY_ID=??GATEWAY_ID

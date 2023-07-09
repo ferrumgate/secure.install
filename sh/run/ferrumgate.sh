@@ -59,7 +59,8 @@ print_usage() {
     echo "  ferrumgate [ --restart ]      -> restart service"
     echo "  ferrumgate [ --status ]       -> show status"
     echo "  ferrumgate [ --uninstall ]    -> uninstall"
-    echo "  ferrumgate [ --config ] [redis,] -> get/set config with name, redis"
+    echo "  ferrumgate [ --set-config ] [redis,es,...] -> set config with name, redis"
+    echo "  ferrumgate [ --show-config ] [var name] -> get config with name"
     echo "  ferrumgate [ --logs ] process -> get logs of process rest,log, parser, admin, task, ssh"
     echo "  ferrumgate [ --list-gateways ]-> list gateways"
     echo "  ferrumgate [ --start-gateway ] gatewayId -> start a gateway"
@@ -75,9 +76,12 @@ print_usage() {
     echo "  ferrumgate [ --add-cluster-peer ] peerVariable -> add a peer to cluster"
     echo "  ferrumgate [ --remove-cluster-peer ] peername -> remove peer from cluster"
     echo "  ferrumgate [ --set-cluster-config ] -> change cluster config"
+    echo "  ferrumgate [ --set-redis-master ] -> change cluster config"
+    echo "  ferrumgate [ --remove-redis-master ] -> change cluster config"
     echo "  ferrumgate [ --show-es-peers ] -> shows es peers"
     echo "  ferrumgate [ --add-es-peer ] peerVariable -> add a peer to es ha"
     echo "  ferrumgate [ --remove-es-peer ] peername -> remove a peer from es ha"
+    echo "  ferrumgate [ --all-logs ] shows all logs"
 
 }
 
@@ -236,7 +240,7 @@ create_gateway() {
     cp $ETC_DIR/gateway.yaml $DOCKER_FILE
     sed -i "s/??GATEWAY_ID/$gateway_id/g" $DOCKER_FILE
     sed -i "s/??SSH_PORT/$port/g" $DOCKER_FILE
-    info "created gateway $gateway_id  at port $port"
+    info "created gateway $gateway_id at port $port"
     info "start gateway"
 }
 
@@ -273,16 +277,23 @@ prepare_env() {
     local redis_host=$(get_config REDIS_HOST)
     local redis_ha_host=$(get_config REDIS_HA_HOST)
     local is_redis_clustered=$(get_config CLUSTER_REDIS_MASTER)
-    if [ -z $is_redis_clustered ]; then
+    if [ -z "$is_redis_clustered" ]; then
+        info "redis is not clustered"
         set_config REDIS_PROXY_HOST $redis_host
+        local redis_host_ssh=$(echo $redis_host | sed 's/:/#/g')
+        set_config REDIS_HOST_SSH $redis_host_ssh
     else
+        info "redis is clustered"
         set_config REDIS_PROXY_HOST $redis_ha_host
+        local redis_host_ssh=$(echo $redis_ha_host | sed 's/:/#/g')
+        set_config REDIS_HOST_SSH $redis_host_ssh
+
     fi
 
     local es_host=$(get_config ES_HOST)
     local es_ha_host=$(get_config ES_HA_HOST)
     local is_es_clustered=$(get_config CLUSTER_ES_PEERS)
-    if [ -z $is_es_clustered ]; then
+    if [ -z "$is_es_clustered" ]; then
         set_config ES_PROXY_HOST $es_host
     else
         set_config ES_PROXY_HOST $es_ha_host
@@ -291,6 +302,7 @@ prepare_env() {
 
 start_gateways() {
     prepare_env
+
     if [ -z $(is_cluster_working) ]; then
         start_cluster
     fi
@@ -340,7 +352,7 @@ set_config() {
     local key=$1
     local value=$2
     file=$ETC_DIR/env
-    sed -i "s#^$key=.*#$key=$value#g" $file
+    sed -i "s|^$key=.*|$key=$value|g" $file
 
 }
 get_config() {
@@ -356,6 +368,10 @@ get_config() {
     echo $value
 }
 
+show_config() {
+    get_config $1
+}
+
 config() {
     if [ $# -lt 1 ]; then
         error "no arguments supplied"
@@ -368,10 +384,10 @@ config() {
 
         redis=$(get_config REDIS_HOST)
         redis_pass=$(get_config REDIS_PASS)
-        echo $redis
-        echo $redis_pass
+        echo "host: $redis"
+        echo "pass: $redis_pass"
         read -p "do you want to change [Yn] " yesno
-        if [ $yesno = "y" ]; then
+        if [ $yesno = "Y" ]; then
             read -p "enter host : " host
             read -p "enter pass : " pass
 
@@ -379,6 +395,9 @@ config() {
             redis_host_ssh=$(echo $host | sed 's/:/#/g')
             set_config REDIS_HOST_SSH $redis_host_ssh
             set_config REDIS_PASS $pass
+
+            set_config REDIS_INTEL_HOST $host
+            set_config REDIS_INTEL_PASS $pass
 
             if [ $host = "redis:6379" ]; then
                 set_config MODE single
@@ -388,16 +407,17 @@ config() {
             info "please restart ferrumgate"
 
         fi
+        return
     fi
 
     if [ $param = "es" ]; then
 
         es=$(get_config ES_HOST)
         es_pass=$(get_config ES_PASS)
-        echo $es
-        echo $es_pass
+        echo "host: $es"
+        echo "pass: $es_pass"
         read -p "do you want to change [Yn] " yesno
-        if [ $yesno = "y" ]; then
+        if [ $yesno = "Y" ]; then
             read -p "enter host : " host
             read -p "enter pass : " pass
 
@@ -409,8 +429,20 @@ config() {
             info "please restart ferrumgate"
 
         fi
+        return
     fi
 
+    value=$(get_config $param)
+    echo "value: $value"
+    read -p "do you want to change [Yn] " yesno
+    if [ $yesno = "Y" ]; then
+        read -p "enter value : " val
+        set_config $param $val
+    fi
+
+}
+all_logs() {
+    docker ps -q | xargs -L 1 -P $(docker ps | wc -l) docker logs --since 30s -f
 }
 
 create_cluster_ip() {
@@ -426,7 +458,7 @@ cluster_info() {
     echo "Peers: $peers"
 }
 is_cluster_working() {
-    local count=$(ip a | grep wg0 | wc -l)
+    local count=$(ip a | grep wgferrum | wc -l)
     if [ ! $count -eq "0" ]; then
         echo "running"
     fi
@@ -437,7 +469,8 @@ stop_cluster() {
     if [ -z $(is_cluster_working) ]; then
         return
     fi
-    wg-quick down wg0
+    wg-quick down wgferrum 2>/dev/null || true
+    ip link del dev wgferrum || true
     info "stoped cluster"
 }
 
@@ -467,9 +500,12 @@ start_cluster() {
     fi
     if [ -z "$node_peers" ]; then
         warn "cluster peers is needed"
+        ip link add dev wgferrum type wireguard || true
+        ip address add dev wgferrum $node_ip/32 || true
+        ip link set up dev wgferrum || true
         return
     fi
-    FILE=/etc/wireguard/wg0.conf
+    FILE=/etc/wireguard/wgferrum.conf
     echo "[Interface]" >$FILE
     echo "Address=$node_ip/32" >>$FILE
     echo "ListenPort=$node_port" >>$FILE
@@ -482,9 +518,9 @@ start_cluster() {
         echo ""
     done
 
-    wg-quick up wg0
-    #ip link add dev wg0 type wireguard || true
-    #wg set wg0 listen-port $node_port private-key /path/to/private-key peer ABCDEF... allowed-ips 192.168.88.0/24 endpoint 209.202.254.14:8172
+    wg-quick up wgferrum
+    #ip link add dev wgferrum type wireguard || true
+    #wg set wgferrum listen-port $node_port private-key /path/to/private-key peer ABCDEF... allowed-ips 192.168.88.0/24 endpoint 209.202.254.14:8172
     info "started cluster"
 
 }
@@ -550,7 +586,7 @@ show_cluster_config() {
     echo "**** commands **********"
     echo "PEER=\"$node_host/$cluster_public_ip:$cluster_public_port/$node_ip/$node_public_key\""
     echo "ferrumgate --add-cluster-peer \$PEER"
-    echo "wg set wg0 peer $(echo $node_public_key | xxd -r -p | base64) allowed-ips $node_ip"
+    echo "wg set wgferrum peer $(echo $node_public_key | xxd -r -p | base64) allowed-ips $node_ip"
 }
 
 add_cluster_peer() {
@@ -776,7 +812,9 @@ main() {
     show-es-peers,\
     add-es-peer:,\
     remove-es-peer:,\
-    set-config:' -- "$@") || exit
+    show-config:,\
+    set-config:,\
+    all-logs' -- "$@") || exit
     eval "set -- $ARGS"
     local service_name=''
     local gateway_id=''
@@ -936,10 +974,21 @@ main() {
             shift 2
             break
             ;;
-        -c | --set-config)
+        --show-config)
             opt=29
             parameter_name="$2"
             shift 2
+            break
+            ;;
+        -c | --set-config)
+            opt=30
+            parameter_name="$2"
+            shift 2
+            break
+            ;;
+        --all-logs)
+            opt=31
+            shift
             break
             ;;
         --)
@@ -985,7 +1034,9 @@ main() {
     [ $opt -eq 26 ] && show_es_peers && exit 0
     [ $opt -eq 27 ] && add_es_peer $parameter_name && exit 0
     [ $opt -eq 28 ] && remove_es_peer $parameter_name && exit 0
-    [ $opt -eq 29 ] && config $parameter_name && exit 0
+    [ $opt -eq 29 ] && show_config $parameter_name && exit 0
+    [ $opt -eq 30 ] && config $parameter_name && exit 0
+    [ $opt -eq 31 ] && all_logs $parameter_name && exit 0
 
 }
 

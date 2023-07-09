@@ -31,7 +31,9 @@ services:
         appendonly yes
         dir /data
         EOF
-   
+        else
+        sed -i "s#^requirepass.*#requirepass ${REDIS_PASS}#g" $$CONF_FILE
+        sed -i "s#^masterauth.*#masterauth ${REDIS_PASS}#g" $$CONF_FILE
         fi
 
 
@@ -66,8 +68,8 @@ services:
         CONF_FILE=/data/redis.conf
         
         cat > $$CONF_FILE << EOF
-        requirepass ${REDIS_PASS}
-        masterauth ${REDIS_PASS}
+        requirepass ${REDIS_LOCAL_PASS}
+        masterauth ${REDIS_LOCAL_PASS}
         protected-mode yes
         daemonize no
         tcp-backlog 511
@@ -110,6 +112,10 @@ services:
           echo "sentinel down-after-milliseconds redis 60000" >> $$CONF_FILE
           echo "sentinel failover-timeout redis 180000" >> $$CONF_FILE
           echo "sentinel parallel-syncs redis 1" >> $$CONF_FILE
+          else
+          sed -i "s#^sentinel announce-ip.*#sentinel announce-ip ${CLUSTER_NODE_IP}#g" $$CONF_FILE
+          sed -i "s#^sentinel monitor redis.*#sentinel monitor redis ${CLUSTER_REDIS_MASTER} 6379 ${CLUSTER_REDIS_QUORUM}#g" $$CONF_FILE
+          sed -i "s#^sentinel auth-pass redis.*#sentinel auth-pass redis ${REDIS_PASS}#g" $$CONF_FILE
           fi
           redis_master=${CLUSTER_REDIS_MASTER}
           if [ ! -z $${redis_master} ];then
@@ -117,6 +123,7 @@ services:
             redis-server $$CONF_FILE --sentinel
           else
             echo "no redis cluster, closing sentinel"
+            rm $$CONF_FILE
           fi
       restart: always
       ports:
@@ -304,7 +311,7 @@ services:
       driver: local
 
   rest:
-    image: "??PRIVATE_REGISTRY/ferrumgate/rest.portal:1.10.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/rest.portal:1.11.0"
     restart: always
     ports:
       - ${REST_HTTP_PORT}:8181
@@ -332,6 +339,9 @@ services:
       restart_policy:
         delay: 5s
       mode: global
+    depends_on:
+      - redis
+      - es
     networks:
       - ferrum
     logging:
@@ -361,6 +371,8 @@ services:
       endpoint_mode: vip
       restart_policy:
         delay: 5s
+    depends_on:
+      - redis
     networks:
       - ferrum
     logging:
@@ -392,6 +404,8 @@ services:
         delay: 5s
     networks:
       - ferrum
+    depends_on:
+      - redis
     logging:
       driver: local      
  
@@ -421,6 +435,8 @@ services:
         delay: 5s
     networks:
       - ferrum
+    depends_on:
+      - redis
     logging:
       driver: local
 
