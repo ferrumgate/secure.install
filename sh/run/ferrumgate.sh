@@ -641,7 +641,6 @@ remove_cluster_peer() {
             peer="$peer $line"
         fi
     done
-    peer="$peer $input"
 
     set_config CLUSTER_NODE_PEERS "$peer"
     info "removed from peers"
