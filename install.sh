@@ -358,7 +358,7 @@ main() {
 
         REST_HTTPS_PORT=$(get_config REST_HTTPS_PORT)
         if [ -z "$REST_HTTPS_PORT" ]; then
-            REST_HTTPS_PORT=80
+            REST_HTTPS_PORT=443
         fi
 
         LOG_REPLICAS=$(get_config LOG_REPLICAS)
