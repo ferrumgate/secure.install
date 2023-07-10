@@ -96,6 +96,8 @@ download() {
 }
 VERSION=1.11.0
 download_and_verify() {
+    rm -rf secure.install
+    rm -rf install.zip
     info "installing version $VERSION"
     [ "$ENV_FOR" != "PROD" ] && return 0
     verify_downloader curl || verify_downloader wget || fatal 'can not find curl or wget for downloading files'
@@ -268,81 +270,91 @@ main() {
         fi
 
         REDIS_HA_HOST=$(get_config REDIS_HA_HOST)
-        if [ -z $REDIS_HA_HOST ]; then
+        if [ -z "$REDIS_HA_HOST" ]; then
             REDIS_HA_HOST="redis-ha:6379"
         fi
 
         REDIS_HOST_SSH=$(echo $REDIS_HOST | sed 's/:/#/g')
 
         REDIS_PASS=$(get_config REDIS_PASS)
-        if [ -z $REDIS_PASS ]; then
+        if [ -z "$REDIS_PASS" ]; then
             REDIS_PASS=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 64 | head -n 1)
         fi
 
         REDIS_LOCAL_HOST=$(get_config REDIS_LOCAL_HOST)
-        if [ -z $REDIS_LOCAL_HOST ]; then
+        if [ -z "$REDIS_LOCAL_HOST" ]; then
             REDIS_LOCAL_HOST=redis-local:6379
         fi
 
         REDIS_LOCAL_PASS=$(get_config REDIS_LOCAL_PASS)
-        if [ -z $REDIS_LOCAL_PASS ]; then
+        if [ -z "$REDIS_LOCAL_PASS" ]; then
             REDIS_LOCAL_PASS=$REDIS_PASS
         fi
 
         REDIS_INTEL_HOST=$(get_config REDIS_INTEL_HOST)
-        if [ -z $REDIS_INTEL_HOST ]; then
+        if [ -z "$REDIS_INTEL_HOST" ]; then
             REDIS_INTEL_HOST=redis:6379
         fi
 
         REDIS_INTEL_PASS=$(get_config REDIS_INTEL_PASS)
-        if [ -z $REDIS_INTEL_PASS ]; then
+        if [ -z "$REDIS_INTEL_PASS" ]; then
             REDIS_INTEL_PASS=$REDIS_PASS
         fi
 
         ES_HOST=$(get_config ES_HOST)
-        if [ -z $ES_HOST ]; then
+        if [ -z "$ES_HOST" ]; then
             ES_HOST=http://es:9200
         fi
 
         ES_HA_HOST=$(get_config ES_HA_HOST)
-        if [ -z $ES_HA_HOST ]; then
+        if [ -z "$ES_HA_HOST" ]; then
             ES_HA_HOST="http://es-ha:9200"
         fi
 
         ES_USER=$(get_config ES_USER)
-        if [ -z $ES_USER ]; then
+        if [ -z "$ES_USER" ]; then
             ES_USER=elastic
         fi
 
         ES_PASS=$(get_config ES_PASS)
-        if [ -z $ES_PASS ]; then
+        if [ -z "$ES_PASS" ]; then
             ES_PASS=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 64 | head -n 1)
         fi
 
         ES_INTEL_HOST=$(get_config ES_INTEL_HOST)
-        if [ -z $ES_INTEL_HOST ]; then
+        if [ -z "$ES_INTEL_HOST" ]; then
             ES_INTEL_HOST=http://es:9200
         fi
 
         ES_INTEL_USER=$(get_config ES_INTEL_USER)
-        if [ -z $ES_INTEL_USER ]; then
+        if [ -z "$ES_INTEL_USER" ]; then
             ES_INTEL_USER=elastic
         fi
 
         ES_INTEL_PASS=$(get_config ES_INTEL_PASS)
-        if [ -z $ES_INTEL_PASS ]; then
+        if [ -z "$ES_INTEL_PASS" ]; then
             ES_INTEL_PASS=$ES_PASS
         fi
 
         ENCRYPT_KEY=$(get_config ENCRYPT_KEY)
 
-        if [ -z $ENCRYPT_KEY ]; then
+        if [ -z "$ENCRYPT_KEY" ]; then
             ENCRYPT_KEY=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 32 | head -n 1)
         fi
 
         MODE=$(get_config MODE)
         if [ -z $MODE ]; then
             MODE=single
+        fi
+
+        REST_HTTP_PORT=$(get_config REST_HTTP_PORT)
+        if [ -z "$REST_HTTP_PORT" ]; then
+            REST_HTTP_PORT=80
+        fi
+
+        REST_HTTPS_PORT=$(get_config REST_HTTPS_PORT)
+        if [ -z "$REST_HTTPS_PORT" ]; then
+            REST_HTTPS_PORT=80
         fi
 
         LOG_REPLICAS=$(get_config LOG_REPLICAS)
@@ -356,12 +368,12 @@ main() {
         fi
 
         CLUSTER_NODE_HOST=$(get_config CLUSTER_NODE_HOST)
-        if [ -z $CLUSTER_NODE_HOST ]; then
+        if [ -z "$CLUSTER_NODE_HOST" ]; then
             CLUSTER_NODE_HOST=$(hostname)
         fi
 
         CLUSTER_NODE_IP=$(get_config CLUSTER_NODE_IP)
-        if [ -z $CLUSTER_NODE_IP ]; then
+        if [ -z "$CLUSTER_NODE_IP" ]; then
             CLUSTER_NODE_IP=$(create_cluster_ip)
         fi
 
@@ -371,11 +383,11 @@ main() {
         fi
 
         CLUSTER_NODE_PRIVATE_KEY=$(get_config CLUSTER_NODE_PRIVATE_KEY)
-        if [ -z $CLUSTER_NODE_PRIVATE_KEY ]; then
+        if [ -z "$CLUSTER_NODE_PRIVATE_KEY" ]; then
             CLUSTER_NODE_PRIVATE_KEY=$(create_cluster_private_key)
         fi
         CLUSTER_NODE_PUBLIC_KEY=$(get_config CLUSTER_NODE_PUBLIC_KEY)
-        if [ -z $CLUSTER_NODE_PUBLIC_KEY ]; then
+        if [ -z "$CLUSTER_NODE_PUBLIC_KEY" ]; then
             CLUSTER_NODE_PUBLIC_KEY=$(create_cluster_public_key $CLUSTER_NODE_PRIVATE_KEY)
         fi
 
@@ -386,7 +398,7 @@ main() {
             CLUSTER_REDIS_QUORUM=2
         fi
         CLUSTER_ES_PEERS=$(get_config CLUSTER_ES_PEERS)
-        if [ -z $CLUSTER_ES_PEERS ]; then
+        if [ -z "$CLUSTER_ES_PEERS" ]; then
             CLUSTER_ES_PEERS=""
         fi
 
@@ -439,8 +451,8 @@ ES_INTEL_HOST=$ES_INTEL_HOST
 ES_INTEL_USER=$ES_INTEL_USER
 ES_INTEL_PASS=$ES_INTEL_PASS
 LOG_LEVEL=$LOG_LEVEL
-REST_HTTP_PORT=80
-REST_HTTPS_PORT=443
+REST_HTTP_PORT=$REST_HTTP_PORT
+REST_HTTPS_PORT=$REST_HTTPS_PORT
 LOG_REPLICAS=$LOG_REPLICAS
 LOG_PARSER_REPLICAS=$LOG_PARSER_REPLICAS
 CLUSTER_NODE_HOST=$CLUSTER_NODE_HOST

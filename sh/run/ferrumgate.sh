@@ -54,6 +54,7 @@ print_usage() {
     echo "usage:"
     echo "version: ${VERSION}"
     echo "  ferrumgate [ --help ]         -> prints help"
+    echo "  ferrumgate [ --version ]         -> prints version"
     echo "  ferrumgate [ --start ]        -> start service"
     echo "  ferrumgate [ --stop ]         -> stop service"
     echo "  ferrumgate [ --restart ]      -> restart service"
@@ -449,6 +450,9 @@ create_cluster_ip() {
     local random=$(shuf -i 1-254 -n1)
     echo "169.254.254.$random"
 }
+show_version() {
+    echo $VERSION
+}
 
 cluster_info() {
     local node_ip=$(get_config CLUSTER_NODE_IP)
@@ -814,6 +818,7 @@ main() {
     remove-es-peer:,\
     show-config:,\
     set-config:,\
+    version,\
     all-logs' -- "$@") || exit
     eval "set -- $ARGS"
     local service_name=''
@@ -986,8 +991,13 @@ main() {
             shift 2
             break
             ;;
-        --all-logs)
+        --version)
             opt=31
+            shift
+            break
+            ;;
+        --all-logs)
+            opt=32
             shift
             break
             ;;
@@ -1036,7 +1046,8 @@ main() {
     [ $opt -eq 28 ] && remove_es_peer $parameter_name && exit 0
     [ $opt -eq 29 ] && show_config $parameter_name && exit 0
     [ $opt -eq 30 ] && config $parameter_name && exit 0
-    [ $opt -eq 31 ] && all_logs $parameter_name && exit 0
+    [ $opt -eq 31 ] && show_version && exit 0
+    [ $opt -eq 32 ] && all_logs $parameter_name && exit 0
 
 }
 
