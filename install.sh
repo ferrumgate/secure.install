@@ -96,8 +96,12 @@ download() {
 }
 VERSION=1.11.0
 download_and_verify() {
-    rm -rf secure.install
-    rm -rf install.zip
+    if [ -d "./secure.install" ]; then
+        rm -rf secure.install
+    fi
+    if [ -f "install.zip" ]; then
+        rm -rf install.zip
+    fi
     info "installing version $VERSION"
     [ "$ENV_FOR" != "PROD" ] && return 0
     verify_downloader curl || verify_downloader wget || fatal 'can not find curl or wget for downloading files'
