@@ -6,7 +6,9 @@ networks:
 volumes:
   redis:
   redis-local-base:
+  redis-sentinel:
   es:
+  ferrum:
 
 
 services:
@@ -18,9 +20,9 @@ services:
       - |
         CONF_FILE=/data/redis.conf
         if [ ! -f $$CONF_FILE ];then
-          echo "file does not exits"
-          cat > $$CONF_FILE << EOF
+        cat > $$CONF_FILE << EOF
         requirepass ${REDIS_PASS}
+        masterauth ${REDIS_PASS}
         protected-mode yes
         daemonize no
         tcp-backlog 511
@@ -31,10 +33,15 @@ services:
         dir /data
         EOF
         else
-          echo "conf file exists"
+        sed -i "s#^requirepass.*#requirepass ${REDIS_PASS}#g" $$CONF_FILE
+        sed -i "s#^masterauth.*#masterauth ${REDIS_PASS}#g" $$CONF_FILE
         fi
+
+
         redis-server $$CONF_FILE
     restart: always
+    ports:
+      - ${CLUSTER_NODE_IP}:6379:6379
     deploy:
       mode: replicated
       replicas: 1
@@ -50,6 +57,9 @@ services:
     logging:
       driver: local
 
+
+
+
   redis-local:
     image: redis:7-bullseye
     command:
@@ -57,10 +67,10 @@ services:
       - -c
       - |
         CONF_FILE=/data/redis.conf
-        if [ ! -f $$CONF_FILE ];then
-          echo "file does not exits"
-          cat > $$CONF_FILE << EOF
-        requirepass ${REDIS_PASS}
+        
+        cat > $$CONF_FILE << EOF
+        requirepass ${REDIS_LOCAL_PASS}
+        masterauth ${REDIS_LOCAL_PASS}
         protected-mode yes
         daemonize no
         tcp-backlog 511
@@ -70,9 +80,8 @@ services:
         appendonly yes
         dir /data
         EOF
-        else
-          echo "conf file exists"
-        fi
+
+        
         redis-server $$CONF_FILE
     restart: always
     deploy:
@@ -86,6 +95,114 @@ services:
     logging:
       driver: local
 
+  redis-sentinel:
+      image: redis:7-bullseye
+      command:
+        - /bin/bash
+        - -c
+        - |
+          CONF_FILE=/data/sentinel.conf
+          if [ ! -f $$CONF_FILE ];then
+          echo "" > $$CONF_FILE
+          echo "protected-mode no" >> $$CONF_FILE
+          echo "dir /data" >> $$CONF_FILE
+          echo "sentinel announce-ip ${CLUSTER_NODE_IP}">>$$CONF_FILE
+          echo "sentinel announce-port 26379">>$$CONF_FILE
+          echo "sentinel monitor redis ${CLUSTER_REDIS_MASTER} 6379 ${CLUSTER_REDIS_QUORUM}" >> $$CONF_FILE
+          echo "sentinel auth-pass redis ${REDIS_PASS}" >> $$CONF_FILE 
+          echo "sentinel down-after-milliseconds redis 60000" >> $$CONF_FILE
+          echo "sentinel failover-timeout redis 180000" >> $$CONF_FILE
+          echo "sentinel parallel-syncs redis 1" >> $$CONF_FILE
+          else
+          sed -i "s#^sentinel announce-ip.*#sentinel announce-ip ${CLUSTER_NODE_IP}#g" $$CONF_FILE
+          sed -i "s#^sentinel monitor redis.*#sentinel monitor redis ${CLUSTER_REDIS_MASTER} 6379 ${CLUSTER_REDIS_QUORUM}#g" $$CONF_FILE
+          sed -i "s#^sentinel auth-pass redis.*#sentinel auth-pass redis ${REDIS_PASS}#g" $$CONF_FILE
+          fi
+          redis_master=${CLUSTER_REDIS_MASTER}
+          if [ ! -z $${redis_master} ];then
+            echo "starting sentinel"
+            redis-server $$CONF_FILE --sentinel
+          else
+            echo "no redis cluster, closing sentinel"
+            rm $$CONF_FILE
+          fi
+      restart: always
+      ports:
+       - ${CLUSTER_NODE_IP}:26379:26379
+      deploy:
+        mode: global
+        restart_policy:
+          delay: 5s
+      networks:
+        - ferrum
+      volumes:
+        - redis-sentinel:/data
+      depends_on:
+      - redis
+      logging:
+        driver: local
+
+  redis-ha:
+    image: haproxy:2.8.1-bullseye
+    command:
+      - /bin/bash
+      - -c
+      - |
+        CONF_FILE=haproxy.cfg
+          
+          cat > $$CONF_FILE << EOF
+        global
+         log stdout format raw local0
+        defaults rediscluster
+        mode tcp
+        timeout connect  4s
+        timeout server  30s
+        timeout client  30s
+ 
+        frontend frontend_redis
+          bind :6379 name redis
+          default_backend backend_redis
+ 
+        backend backend_redis
+              option tcp-check
+                    tcp-check send "auth ${REDIS_PASS}"\r\n
+                    tcp-check expect string +OK
+                    tcp-check send info\ replication\r\n
+                    tcp-check expect string role:master
+                    tcp-check send QUIT\r\n
+              tcp-check expect string +OK
+        EOF
+        echo " server ${CLUSTER_NODE_HOST} ${CLUSTER_NODE_IP}:6379 check inter 3s  fall 3  rise 21" >> $$CONF_FILE
+        peers="${CLUSTER_NODE_PEERS}"
+        for line in $$peers;do
+          
+          host=$$(echo $$line|cut -d'/' -f1);
+          ip=$$(echo $$line|cut -d'/' -f3);
+          
+          if [ ! -z $$host ] && [ ! -z $$ip ];then
+          echo " server $$host $$ip:6379 check inter 3s  fall 3  rise 21" >> $$CONF_FILE
+          fi
+
+        done
+        
+        redis_master=${CLUSTER_REDIS_MASTER}
+        if [ ! -z "$$redis_master" ];then
+         echo "starting redis-ha"
+         haproxy  -f haproxy.cfg
+        else 
+          echo "no redis cluster, closing ha"
+        fi
+    restart: always
+    deploy:
+      mode: global
+      restart_policy:
+        delay: 5s
+    networks:
+      - ferrum
+    depends_on:
+      - redis
+    logging:
+      driver: local
 
   es:
     image: elasticsearch:8.5.0
@@ -96,6 +213,7 @@ services:
       - discovery.type=single-node
       - xpack.security.enabled=true
       - xpack.ml.enabled=false
+      - network.host=0.0.0.0
     deploy:
       mode: replicated
       replicas: 1
@@ -104,6 +222,8 @@ services:
       placement:
         constraints:
           - Ferrum_Node=management
+    ports:
+       - ${CLUSTER_NODE_IP}:9200:9200
     mem_limit: 2073741824
     ulimits:
       memlock:
@@ -116,8 +236,71 @@ services:
     logging:
       driver: local
 
+  es-ha:
+    image: haproxy:2.8.1-bullseye
+    command:
+      - /bin/bash
+      - -c
+      - |
+        CONF_FILE=haproxy.cfg
+          
+          cat > $$CONF_FILE << EOF
+        global
+         log stdout format raw local0
+        defaults escluster
+        mode tcp
+        timeout connect  4s
+        timeout server  30s
+        timeout client  30s
+ 
+        frontend frontend_es
+          bind :9200 name es
+          default_backend backend_es
+ 
+        backend backend_es
+        EOF
+        
+        peers="${CLUSTER_ES_PEERS}"
+        backup="";
+        for line in $$peers;do
+          host=$$(echo $$line|cut -d'/' -f1);
+          ip=$$(echo $$line|cut -d'/' -f2);
+          
+          if [ ! -z $$host ] && [ ! -z $$ip ];then
+            backup_str=""
+            if [ -z $$backup ];then
+                backup_str="";
+            else
+                backup_str="backup"
+            fi
+            backup="backup";
+            echo " server $$host $$ip:9200 check inter 3s  fall 20  rise 20 $$backup_str" >> $$CONF_FILE
+          fi
+
+        done
+
+        es_peers="${CLUSTER_ES_PEERS}"
+        if [ ! -z "$$es_peers" ];then
+         echo "starting es-ha"
+         haproxy  -f haproxy.cfg
+        else 
+          echo "no es cluster, closing ha"
+        fi
+    restart: always
+    deploy:
+      mode: global
+      restart_policy:
+        delay: 5s
+    networks:
+      - ferrum
+    depends_on:
+      - es
+    logging:
+      driver: local
+
+
   ui:
-    image: "??PRIVATE_REGISTRY/ferrumgate/ui.portal:1.10.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/ui.portal:1.11.0"
     restart: always
     deploy:
       mode: global
@@ -129,14 +312,14 @@ services:
       driver: local
 
   rest:
-    image: "??PRIVATE_REGISTRY/ferrumgate/rest.portal:1.10.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/rest.portal:1.11.0"
     restart: always
     ports:
       - ${REST_HTTP_PORT}:8181
       - ${REST_HTTPS_PORT}:8443
     environment:
       - PORT=8181
-      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_HOST=${REDIS_PROXY_HOST}
       - REDIS_PASS=${REDIS_PASS}
       - REDIS_LOCAL_HOST=${REDIS_LOCAL_HOST}
       - REDIS_LOCAL_PASS=${REDIS_LOCAL_PASS}
@@ -144,10 +327,10 @@ services:
       - REDIS_INTEL_PASS=${REDIS_INTEL_PASS}
       - BASE_RATE_LIMIT=25
       - ENCRYPT_KEY=${ENCRYPT_KEY}
-      - ES_HOST=${ES_HOST}
+      - ES_HOST=${ES_PROXY_HOST}
       - ES_USER=${ES_USER}
       - ES_PASS=${ES_PASS}
-      - ES_INTEL_HOST=${ES_INTEL_HOST}
+      - ES_INTEL_HOST=${ES_PROXY_HOST}
       - ES_INTEL_USER=${ES_INTEL_USER}
       - ES_INTEL_PASS=${ES_INTEL_PASS}
       - LOG_LEVEL=${LOG_LEVEL}
@@ -157,21 +340,26 @@ services:
       restart_policy:
         delay: 5s
       mode: global
+    depends_on:
+      - redis
+      - es
     networks:
       - ferrum
+    volumes:  
+      - ferrum:/var/lib/ferrumgate
     logging:
       driver: local
 
   log:
-    image: "??PRIVATE_REGISTRY/ferrumgate/job.log:1.9.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.log:1.10.0"
     restart: always
     environment:
-      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_HOST=${REDIS_PROXY_HOST}
       - REDIS_PASS=${REDIS_PASS}
       - REDIS_LOCAL_HOST=${REDIS_LOCAL_HOST}
       - REDIS_LOCAL_PASS=${REDIS_LOCAL_PASS}
       - ENCRYPT_KEY=${ENCRYPT_KEY}
-      - ES_HOST=${ES_HOST}
+      - ES_HOST=${ES_PROXY_HOST}
       - ES_USER=${ES_USER}
       - ES_PASS=${ES_PASS}
       - LOG_LEVEL=${LOG_LEVEL}
@@ -186,21 +374,23 @@ services:
       endpoint_mode: vip
       restart_policy:
         delay: 5s
+    depends_on:
+      - redis
     networks:
       - ferrum
     logging:
       driver: local
 
   log-parser:
-    image: "??PRIVATE_REGISTRY/ferrumgate/job.log:1.9.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.log:1.10.0"
     restart: always
     environment:
-      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_HOST=${REDIS_PROXY_HOST}
       - REDIS_PASS=${REDIS_PASS}
       - REDIS_LOCAL_HOST=${REDIS_LOCAL_HOST}
       - REDIS_LOCAL_PASS=${REDIS_LOCAL_PASS}
       - ENCRYPT_KEY=${ENCRYPT_KEY}
-      - ES_HOST=${ES_HOST}
+      - ES_HOST=${ES_PROXY_HOST}
       - ES_USER=${ES_USER}
       - ES_PASS=${ES_PASS}
       - LOG_LEVEL=${LOG_LEVEL}
@@ -217,24 +407,26 @@ services:
         delay: 5s
     networks:
       - ferrum
+    depends_on:
+      - redis
     logging:
       driver: local      
  
   task:
-    image: "??PRIVATE_REGISTRY/ferrumgate/job.task:1.5.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.task:1.6.0"
     restart: always
     environment:
-      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_HOST=${REDIS_PROXY_HOST}
       - REDIS_PASS=${REDIS_PASS}
       - REDIS_LOCAL_HOST=${REDIS_LOCAL_HOST}
       - REDIS_LOCAL_PASS=${REDIS_LOCAL_PASS}
       - REDIS_INTEL_HOST=${REDIS_INTEL_HOST}
       - REDIS_INTEL_PASS=${REDIS_INTEL_PASS}
       - ENCRYPT_KEY=${ENCRYPT_KEY}
-      - ES_HOST=${ES_HOST}
+      - ES_HOST=${ES_PROXY_HOST}
       - ES_USER=${ES_USER}
       - ES_PASS=${ES_PASS}
-      - ES_INTEL_HOST=${ES_INTEL_HOST}
+      - ES_INTEL_HOST=${ES_PROXY_HOST}
       - ES_INTEL_USER=${ES_INTEL_USER}
       - ES_INTEL_PASS=${ES_INTEL_PASS}
       - LOG_LEVEL=${LOG_LEVEL}
@@ -246,6 +438,8 @@ services:
         delay: 5s
     networks:
       - ferrum
+    depends_on:
+      - redis
     logging:
       driver: local
 

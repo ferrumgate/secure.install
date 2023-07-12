@@ -94,8 +94,14 @@ download() {
     # Abort if download command failed
     [ $? -eq 0 ] || fatal 'Download failed'
 }
-VERSION=1.10.0
+VERSION=1.11.0
 download_and_verify() {
+    if [ -d "./secure.install" ]; then
+        rm -rf secure.install
+    fi
+    if [ -f "install.zip" ]; then
+        rm -rf install.zip
+    fi
     info "installing version $VERSION"
     [ "$ENV_FOR" != "PROD" ] && return 0
     verify_downloader curl || verify_downloader wget || fatal 'can not find curl or wget for downloading files'
@@ -163,13 +169,24 @@ get_config() {
         echo ""
         return
     fi
-    value=$(cat $file | grep $key= | cut -d"=" -f2)
+    value=$(cat $file | grep $key= | cut -d"=" -f2-)
     echo $value
 }
 
 is_gateway_yaml() {
     result=$(echo $1 | grep -E "gateway\.\w+\.yaml" || true)
     echo $result
+}
+
+create_cluster_ip() {
+    local random=$(shuf -i 1-254 -n1)
+    echo "169.254.254.$random"
+}
+create_cluster_private_key() {
+    wg genkey | base64 -d | xxd -p -c 256
+}
+create_cluster_public_key() {
+    echo $1 | xxd -r -p | base64 | wg pubkey | base64 -d | xxd -p -c 256
 }
 
 main() {
@@ -256,72 +273,92 @@ main() {
             REDIS_HOST="redis:6379"
         fi
 
+        REDIS_HA_HOST=$(get_config REDIS_HA_HOST)
+        if [ -z "$REDIS_HA_HOST" ]; then
+            REDIS_HA_HOST="redis-ha:6379"
+        fi
+
         REDIS_HOST_SSH=$(echo $REDIS_HOST | sed 's/:/#/g')
 
         REDIS_PASS=$(get_config REDIS_PASS)
-        if [ -z $REDIS_PASS ]; then
+        if [ -z "$REDIS_PASS" ]; then
             REDIS_PASS=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 64 | head -n 1)
         fi
 
         REDIS_LOCAL_HOST=$(get_config REDIS_LOCAL_HOST)
-        if [ -z $REDIS_LOCAL_HOST ]; then
+        if [ -z "$REDIS_LOCAL_HOST" ]; then
             REDIS_LOCAL_HOST=redis-local:6379
         fi
 
         REDIS_LOCAL_PASS=$(get_config REDIS_LOCAL_PASS)
-        if [ -z $REDIS_LOCAL_PASS ]; then
+        if [ -z "$REDIS_LOCAL_PASS" ]; then
             REDIS_LOCAL_PASS=$REDIS_PASS
         fi
 
         REDIS_INTEL_HOST=$(get_config REDIS_INTEL_HOST)
-        if [ -z $REDIS_INTEL_HOST ]; then
+        if [ -z "$REDIS_INTEL_HOST" ]; then
             REDIS_INTEL_HOST=redis:6379
         fi
 
         REDIS_INTEL_PASS=$(get_config REDIS_INTEL_PASS)
-        if [ -z $REDIS_INTEL_PASS ]; then
+        if [ -z "$REDIS_INTEL_PASS" ]; then
             REDIS_INTEL_PASS=$REDIS_PASS
         fi
 
         ES_HOST=$(get_config ES_HOST)
-        if [ -z $ES_HOST ]; then
+        if [ -z "$ES_HOST" ]; then
             ES_HOST=http://es:9200
         fi
 
+        ES_HA_HOST=$(get_config ES_HA_HOST)
+        if [ -z "$ES_HA_HOST" ]; then
+            ES_HA_HOST="http://es-ha:9200"
+        fi
+
         ES_USER=$(get_config ES_USER)
-        if [ -z $ES_USER ]; then
+        if [ -z "$ES_USER" ]; then
             ES_USER=elastic
         fi
 
         ES_PASS=$(get_config ES_PASS)
-        if [ -z $ES_PASS ]; then
+        if [ -z "$ES_PASS" ]; then
             ES_PASS=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 64 | head -n 1)
         fi
 
         ES_INTEL_HOST=$(get_config ES_INTEL_HOST)
-        if [ -z $ES_INTEL_HOST ]; then
+        if [ -z "$ES_INTEL_HOST" ]; then
             ES_INTEL_HOST=http://es:9200
         fi
 
         ES_INTEL_USER=$(get_config ES_INTEL_USER)
-        if [ -z $ES_INTEL_USER ]; then
+        if [ -z "$ES_INTEL_USER" ]; then
             ES_INTEL_USER=elastic
         fi
 
         ES_INTEL_PASS=$(get_config ES_INTEL_PASS)
-        if [ -z $ES_INTEL_PASS ]; then
+        if [ -z "$ES_INTEL_PASS" ]; then
             ES_INTEL_PASS=$ES_PASS
         fi
 
         ENCRYPT_KEY=$(get_config ENCRYPT_KEY)
 
-        if [ -z $ENCRYPT_KEY ]; then
+        if [ -z "$ENCRYPT_KEY" ]; then
             ENCRYPT_KEY=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 32 | head -n 1)
         fi
 
         MODE=$(get_config MODE)
         if [ -z $MODE ]; then
             MODE=single
+        fi
+
+        REST_HTTP_PORT=$(get_config REST_HTTP_PORT)
+        if [ -z "$REST_HTTP_PORT" ]; then
+            REST_HTTP_PORT=80
+        fi
+
+        REST_HTTPS_PORT=$(get_config REST_HTTPS_PORT)
+        if [ -z "$REST_HTTPS_PORT" ]; then
+            REST_HTTPS_PORT=443
         fi
 
         LOG_REPLICAS=$(get_config LOG_REPLICAS)
@@ -332,6 +369,41 @@ main() {
         LOG_PARSER_REPLICAS=$(get_config LOG_PARSER_REPLICAS)
         if [ -z $LOG_PARSER_REPLICAS ]; then
             LOG_PARSER_REPLICAS=1
+        fi
+
+        CLUSTER_NODE_HOST=$(get_config CLUSTER_NODE_HOST)
+        if [ -z "$CLUSTER_NODE_HOST" ]; then
+            CLUSTER_NODE_HOST=$(hostname)
+        fi
+
+        CLUSTER_NODE_IP=$(get_config CLUSTER_NODE_IP)
+        if [ -z "$CLUSTER_NODE_IP" ]; then
+            CLUSTER_NODE_IP=$(create_cluster_ip)
+        fi
+
+        CLUSTER_NODE_PORT=$(get_config CLUSTER_NODE_PORT)
+        if [ -z $CLUSTER_NODE_PORT ]; then
+            CLUSTER_NODE_PORT=54321
+        fi
+
+        CLUSTER_NODE_PRIVATE_KEY=$(get_config CLUSTER_NODE_PRIVATE_KEY)
+        if [ -z "$CLUSTER_NODE_PRIVATE_KEY" ]; then
+            CLUSTER_NODE_PRIVATE_KEY=$(create_cluster_private_key)
+        fi
+        CLUSTER_NODE_PUBLIC_KEY=$(get_config CLUSTER_NODE_PUBLIC_KEY)
+        if [ -z "$CLUSTER_NODE_PUBLIC_KEY" ]; then
+            CLUSTER_NODE_PUBLIC_KEY=$(create_cluster_public_key $CLUSTER_NODE_PRIVATE_KEY)
+        fi
+
+        CLUSTER_NODE_PEERS=$(get_config CLUSTER_NODE_PEERS)
+        CLUSTER_REDIS_MASTER=$(get_config CLUSTER_REDIS_MASTER)
+        CLUSTER_REDIS_QUORUM=$(get_config CLUSTER_REDIS_QUORUM)
+        if [ -z $CLUSTER_REDIS_QUORUM ]; then
+            CLUSTER_REDIS_QUORUM=2
+        fi
+        CLUSTER_ES_PEERS=$(get_config CLUSTER_ES_PEERS)
+        if [ -z "$CLUSTER_ES_PEERS" ]; then
+            CLUSTER_ES_PEERS=""
         fi
 
         #SSL_FILE=$(create_certificates)
@@ -365,7 +437,9 @@ main() {
 DEPLOY=docker
 DEPLOY_ID=$DEPLOY_ID
 REDIS_HOST=$REDIS_HOST
+REDIS_HA_HOST=$REDIS_HA_HOST
 REDIS_HOST_SSH=$REDIS_HOST_SSH
+REDIS_PROXY_HOST=
 REDIS_PASS=$REDIS_PASS
 REDIS_LOCAL_HOST=$REDIS_LOCAL_HOST
 REDIS_LOCAL_PASS=$REDIS_LOCAL_PASS
@@ -373,16 +447,28 @@ REDIS_INTEL_HOST=$REDIS_INTEL_HOST
 REDIS_INTEL_PASS=$REDIS_INTEL_PASS
 ENCRYPT_KEY=$ENCRYPT_KEY
 ES_HOST=$ES_HOST
+ES_HA_HOST=$ES_HA_HOST
 ES_USER=$ES_USER
 ES_PASS=$ES_PASS
+ES_PROXY_HOST=
 ES_INTEL_HOST=$ES_INTEL_HOST
 ES_INTEL_USER=$ES_INTEL_USER
 ES_INTEL_PASS=$ES_INTEL_PASS
 LOG_LEVEL=$LOG_LEVEL
-REST_HTTP_PORT=80
-REST_HTTPS_PORT=443
+REST_HTTP_PORT=$REST_HTTP_PORT
+REST_HTTPS_PORT=$REST_HTTPS_PORT
 LOG_REPLICAS=$LOG_REPLICAS
 LOG_PARSER_REPLICAS=$LOG_PARSER_REPLICAS
+CLUSTER_NODE_HOST=$CLUSTER_NODE_HOST
+CLUSTER_NODE_IP=$CLUSTER_NODE_IP
+CLUSTER_NODE_PORT=$CLUSTER_NODE_PORT
+CLUSTER_NODE_PRIVATE_KEY=$CLUSTER_NODE_PRIVATE_KEY
+CLUSTER_NODE_PUBLIC_KEY=$CLUSTER_NODE_PUBLIC_KEY
+CLUSTER_NODE_PEERS=$CLUSTER_NODE_PEERS
+CLUSTER_REDIS_MASTER=$CLUSTER_REDIS_MASTER
+CLUSTER_REDIS_QUORUM=$CLUSTER_REDIS_QUORUM
+CLUSTER_ES_PEERS=$CLUSTER_ES_PEERS
+
 EOF
 
         chmod 600 $ENV_FILE_ETC
@@ -467,7 +553,7 @@ EOF
                     docker compose -f $ETC_DIR/$file --env-file $ENV_FILE_ETC pull
                 fi
             done
-            ferrumgate --start
+            ferrumgate --restart
         fi
         info "system is ready"
 
