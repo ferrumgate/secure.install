@@ -8,6 +8,7 @@ volumes:
   redis-local-base:
   redis-sentinel:
   es:
+  ferrum:
 
 
 services:
@@ -344,6 +345,8 @@ services:
       - es
     networks:
       - ferrum
+    volumes:  
+      - ferrum:/var/lib/ferrumgate
     logging:
       driver: local
 
