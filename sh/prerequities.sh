@@ -41,7 +41,8 @@ prerequities() {
         wireguard \
         ipcalc \
         net-tools \
-        sysstat
+        sysstat \
+        xxd
 
     ####
     info "load ipvs modules, and netfilter modules"
