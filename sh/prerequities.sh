@@ -46,7 +46,6 @@ prerequities() {
     ####
     info "load ipvs modules, and netfilter modules"
     cat <<EOF | tee /etc/modules-load.d/ipvs.conf
-br_netfilter
 ip_vs
 ip_vs_rr
 ip_vs_wrr
@@ -60,7 +59,7 @@ nf_conntrack
 EOF
 
     #### load modules to kernel
-    modprobe -- br_netfilter
+    #modprobe -- br_netfilter
     modprobe -- ip_vs
     modprobe -- ip_vs_rr
     modprobe -- ip_vs_wrr
