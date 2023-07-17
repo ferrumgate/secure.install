@@ -98,7 +98,7 @@ stop_service() {
 
     #systemctl stop ferrumgate
     stop_gateways
-    docker ps | grep ferrumgate | tr -s ' ' | cut -d' ' -f 1 | xargs -r docker stop
+    docker ps | grep "fg-" | tr -s ' ' | cut -d' ' -f 1 | xargs -r docker stop
     info "ferrumgate stopped"
     info "for more execute docker ps"
 
@@ -123,9 +123,9 @@ uninstall() {
         systemctl stop ferrumgate
         systemctl disable ferrumgate
         ## force
-        docker ps | grep ferrumgate | tr -s ' ' | cut -d' ' -f 1 | xargs -r docker stop
-        docker stop $(docker ps -aq)
-        docker rm $(docker ps -aq)
+        docker ps | grep "fg-" | tr -s ' ' | cut -d' ' -f 1 | xargs -r docker stop
+        docker ps -a | grep "fg-" | tr -s ' ' | cut -d' ' -f 1 | xargs -r docker rm
+
         ## rm service
         rm /etc/systemd/system/ferrumgate.service
         ## rm folder
