@@ -31,14 +31,15 @@ services:
  
 
   server-ssh:
-    image: "??PRIVATE_REGISTRY/ferrumgate/secure.server.ssh:1.0.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/secure.server.quic:1.0.0"
     labels:
         FerrumGatewayId: "??GATEWAY_ID"
     restart: always
     ports:
-      - "??SSH_PORT:9999"
+      - "??SSH_PORT:9999/tcp"
+      - "??SSH_PORT:9999/udp"
     environment:
-      - REDIS_HOST=${REDIS_HOST_SSH}
+      - REDIS_HOST=${REDIS_HOST}
       - REDIS_PASS=${REDIS_PASS}
       - PORT=9999
       - GATEWAY_ID=??GATEWAY_ID
@@ -61,6 +62,7 @@ services:
       - fg-base_ferrum
     logging:
       driver: local
+
 
   admin:
     image: "??PRIVATE_REGISTRY/ferrumgate/job.admin:1.11.0"

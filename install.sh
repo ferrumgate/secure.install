@@ -94,7 +94,7 @@ download() {
     # Abort if download command failed
     [ $? -eq 0 ] || fatal 'Download failed'
 }
-VERSION=1.11.0
+VERSION=1.12.0
 download_and_verify() {
     if [ -d "./secure.install" ]; then
         rm -rf secure.install
@@ -524,7 +524,7 @@ EOF
                 result=$(is_gateway_yaml $file)
                 if [ ! -z $result ]; then
                     local gateway_id=$(echo "$file" | sed -e "s/gateway.//" -e "s/.yaml//")
-                    local ssh_port=$(cat $ETC_DIR/$file | grep ":9999" | sed -e "s/-//g" | sed -e "s/ //g" | sed -e "s/\"//g" | cut -d":" -f1)
+                    local ssh_port=$(cat $ETC_DIR/$file | grep ":9999" | head -n 1 | sed -e "s/-//g" | sed -e "s/ //g" | sed -e "s/\"//g" | cut -d":" -f1)
                     cp $ETC_DIR/gateway.yaml $ETC_DIR/$file
                     sed -i "s/??GATEWAY_ID/$gateway_id/g" $ETC_DIR/$file
                     sed -i "s/??SSH_PORT/$ssh_port/g" $ETC_DIR/$file
