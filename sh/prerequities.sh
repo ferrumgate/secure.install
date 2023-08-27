@@ -31,7 +31,6 @@ prerequities() {
         unzip \
         tcpdump \
         dnsutils \
-        iperf3 \
         bmon \
         htop \
         ca-certificates \
@@ -42,11 +41,12 @@ prerequities() {
         ipcalc \
         net-tools \
         sysstat \
-        xxd
+        xxd \
+        conntrack
 
     ####
     info "load ipvs modules, and netfilter modules"
-    cat <<EOF | tee /etc/modules-load.d/ipvs.conf
+    cat <<EOF | tee /etc/modules-load.d/ferrumgate.conf
 br_netfilter
 ip_vs
 ip_vs_rr
@@ -56,7 +56,6 @@ ip_vs_lc
 ip_vs_dh
 ip_vs_sed
 ip_vs_nq
-nf_conntrack_ipv4
 nf_conntrack
 EOF
 
