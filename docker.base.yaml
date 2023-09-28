@@ -336,6 +336,8 @@ services:
       - LOG_LEVEL=${LOG_LEVEL}
       - STATIC_FOLDER=/usr/src/app/web
       - UI_HOST=ui:80
+      - SHARE_PRIVATE_FOLDER=/usr/local/share/ferrumgate/private
+      - SHARE_PUBLIC_FOLDER=/usr/local/share/ferrumgate/public
     deploy:
       restart_policy:
         delay: 5s
@@ -347,6 +349,7 @@ services:
       - ferrum
     volumes:  
       - ferrum:/var/lib/ferrumgate
+      - /usr/local/share/ferrumgate:/usr/local/share/ferrumgate
     logging:
       driver: local
 

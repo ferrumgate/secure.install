@@ -157,6 +157,7 @@ create_certificates() {
     echo ${domain}
 }
 ETC_DIR=/etc/ferrumgate
+SHARE_DIR=/usr/local/share/ferrumgate
 get_config() {
     if [ $# -lt 1 ]; then
         error "no arguments supplied"
@@ -240,6 +241,7 @@ main() {
     . ./sh/docker.sh
 
     mkdir -p $ETC_DIR
+    mkdir -p $SHARE_DIR
     if [ "$INSTALL" = "docker" ]; then
 
         if [ $ENV_FOR = "PROD" ]; then
