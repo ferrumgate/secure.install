@@ -15,15 +15,16 @@ if [ -f "./sh/common.sh" ]; then
 fi
 docker_install() {
     info "installing docker"
+    LINUX_TYPE=$(cat /etc/*release | grep "^ID=" | cut -d'=' -f2)
     apt update --assume-yes
     apt remove docker docker.io containerd runc
     apt update --assume-yes
     apt upgrade --assume-yes
 
     mkdir -p /etc/apt/keyrings
-    curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor --batch --yes -o /etc/apt/keyrings/docker.gpg
+    curl -fsSL https://download.docker.com/linux/$LINUX_TYPE/gpg | gpg --dearmor --batch --yes -o /etc/apt/keyrings/docker.gpg
     echo \
-        "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian \
+        "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$LINUX_TYPE \
   $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list >/dev/null
 
     apt update --assume-yes
