@@ -300,7 +300,7 @@ services:
 
 
   ui:
-    image: "??PRIVATE_REGISTRY/ferrumgate/ui.portal:1.13.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/ui.portal:1.14.0"
     restart: always
     deploy:
       mode: global
@@ -312,7 +312,7 @@ services:
       driver: local
 
   rest:
-    image: "??PRIVATE_REGISTRY/ferrumgate/rest.portal:1.13.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/rest.portal:1.14.0"
     restart: always
     ports:
       - ${REST_HTTP_PORT}:8181
@@ -354,7 +354,7 @@ services:
       driver: local
 
   log:
-    image: "??PRIVATE_REGISTRY/ferrumgate/job.log:1.10.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.log:1.11.0"
     restart: always
     environment:
       - REDIS_HOST=${REDIS_PROXY_HOST}
@@ -385,7 +385,7 @@ services:
       driver: local
 
   log-parser:
-    image: "??PRIVATE_REGISTRY/ferrumgate/job.log:1.10.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.log:1.11.0"
     restart: always
     environment:
       - REDIS_HOST=${REDIS_PROXY_HOST}
@@ -416,7 +416,7 @@ services:
       driver: local      
  
   task:
-    image: "??PRIVATE_REGISTRY/ferrumgate/job.task:1.6.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.task:1.7.0"
     restart: always
     environment:
       - REDIS_HOST=${REDIS_PROXY_HOST}
