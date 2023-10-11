@@ -15,7 +15,7 @@ if [ -f "./sh/common.sh" ]; then
 fi
 docker_install() {
     info "installing docker"
-    LINUX_TYPE=$(cat /etc/*release | grep "^ID=" | cut -d'=' -f2)
+    LINUX_TYPE=$(cat /etc/os-release | grep "^ID=" | cut -d'=' -f2)
     apt update --assume-yes
     apt remove docker docker.io containerd runc
     apt update --assume-yes
