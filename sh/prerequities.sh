@@ -42,7 +42,7 @@ prerequities() {
         net-tools \
         sysstat \
         xxd \
-        conntrack
+        conntrack ntp
 
     ####
     info "load ipvs modules, and netfilter modules"

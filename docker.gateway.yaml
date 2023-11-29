@@ -31,7 +31,7 @@ services:
  
 
   server-ssh:
-    image: "??PRIVATE_REGISTRY/ferrumgate/secure.server.quic:1.0.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/secure.server.quic:1.1.0"
     labels:
         FerrumGatewayId: "??GATEWAY_ID"
     restart: always
@@ -65,7 +65,7 @@ services:
 
 
   admin:
-    image: "??PRIVATE_REGISTRY/ferrumgate/job.admin:1.12.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.admin:1.13.0"
     labels:
         FerrumGatewayId: "??GATEWAY_ID"
     restart: always
@@ -80,7 +80,7 @@ services:
       - REDIS_LOCAL_PASS=${REDIS_LOCAL_PASS}
       - REDIS_INTEL_HOST=${REDIS_INTEL_HOST}
       - REDIS_INTEL_PASS=${REDIS_INTEL_PASS}
-      - FERRUM_IO_IMAGE=??PRIVATE_REGISTRY/ferrumgate/ferrum.io:1.4.0
+      - FERRUM_IO_IMAGE=??PRIVATE_REGISTRY/ferrumgate/ferrum.io:1.5.0
       - ENCRYPT_KEY=${ENCRYPT_KEY}
       - GATEWAY_ID=??GATEWAY_ID
       - ES_HOST=${ES_PROXY_HOST}
