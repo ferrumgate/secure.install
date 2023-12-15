@@ -39,7 +39,7 @@ services:
       - "??SSH_PORT:9999/tcp"
       - "??SSH_PORT:9999/udp"
     environment:
-      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_HOST=${REDIS_PROXY_HOST}
       - REDIS_PASS=${REDIS_PASS}
       - PORT=9999
       - GATEWAY_ID=??GATEWAY_ID
