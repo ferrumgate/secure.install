@@ -65,7 +65,7 @@ services:
 
 
   admin:
-    image: "??PRIVATE_REGISTRY/ferrumgate/job.admin:1.13.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.admin:1.14.0"
     labels:
         FerrumGatewayId: "??GATEWAY_ID"
     restart: always
