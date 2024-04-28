@@ -2,9 +2,6 @@ version: "3.9"
 
 networks:
   ferrum:
-  fg-base_ferrum:
-    external: true
-
 
 volumes:
   ferrum:
@@ -14,7 +11,7 @@ services:
   prepare:
     image: alpine:3.17
     labels:
-        FerrumGatewayId: "??GATEWAY_ID"
+      FerrumGatewayId: "??GATEWAY_ID"
     command:
       - /bin/sh
       - -c
@@ -28,12 +25,11 @@ services:
       - ferrum
     volumes:
       - ferrum:/data
- 
 
   server-ssh:
     image: "??PRIVATE_REGISTRY/ferrumgate/secure.server.quic:1.1.0"
     labels:
-        FerrumGatewayId: "??GATEWAY_ID"
+      FerrumGatewayId: "??GATEWAY_ID"
     restart: always
     ports:
       - "??SSH_PORT:9999/tcp"
@@ -59,26 +55,21 @@ services:
       - ferrum:/etc/ferrumgate
     networks:
       - ferrum
-      - fg-base_ferrum
     logging:
       driver: local
-
 
   admin:
     image: "??PRIVATE_REGISTRY/ferrumgate/job.admin:1.14.0"
     labels:
-        FerrumGatewayId: "??GATEWAY_ID"
+      FerrumGatewayId: "??GATEWAY_ID"
     restart: always
     privileged: true
-    #cap_add:
-    #  - NET_ADMIN
-    #  - MKNOD
     environment:
       - REDIS_HOST=${REDIS_PROXY_HOST}
       - REDIS_PASS=${REDIS_PASS}
       - REDIS_LOCAL_HOST=${REDIS_LOCAL_HOST}
       - REDIS_LOCAL_PASS=${REDIS_LOCAL_PASS}
-      - REDIS_INTEL_HOST=${REDIS_INTEL_HOST}
+      - REDIS_INTEL_HOST=${REDIS_INTEL_PROXY_HOST}
       - REDIS_INTEL_PASS=${REDIS_INTEL_PASS}
       - FERRUM_IO_IMAGE=??PRIVATE_REGISTRY/ferrumgate/ferrum.io:1.5.0
       - ENCRYPT_KEY=${ENCRYPT_KEY}
@@ -105,5 +96,3 @@ services:
     network_mode: service:server-ssh
     logging:
       driver: local
- 
-  

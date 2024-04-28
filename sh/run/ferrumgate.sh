@@ -62,13 +62,14 @@ print_usage() {
     echo "  ferrumgate [ --uninstall ]    -> uninstall"
     echo "  ferrumgate [ --set-config ] [redis,es,...] -> set config with name, redis"
     echo "  ferrumgate [ --show-config ] [var name] -> get config with name"
-    echo "  ferrumgate [ --logs ] process -> get logs of process rest,log, parser, admin, task, ssh"
+    echo "  ferrumgate [ --logs ] process -> get logs of process rest,log, parser, admin, task, quic"
     echo "  ferrumgate [ --list-gateways ]-> list gateways"
     echo "  ferrumgate [ --start-gateway ] gatewayId -> start a gateway"
     echo "  ferrumgate [ --stop-gateway ] gatewayId -> stop a gateway"
     echo "  ferrumgate [ --delete-gateway ] gatewayId  -> delete a gateway"
     echo "  ferrumgate [ --create-gateway ] -> creates a new gateway"
     echo "  ferrumgate [ --recreate-gateway ] -> recreates a gateway"
+    echo "  ferrumgate [ --create-cluster ] -> create a cluster"
     echo "  ferrumgate [ --start-cluster ] -> starts cluster"
     echo "  ferrumgate [ --stop-cluster ] -> stop cluster"
     echo "  ferrumgate [ --status-cluster ] -> cluster status"
@@ -76,28 +77,28 @@ print_usage() {
     echo "  ferrumgate [ --show-cluster-config ] -> show cluster config"
     echo "  ferrumgate [ --add-cluster-peer ] peerVariable -> add a peer to cluster"
     echo "  ferrumgate [ --remove-cluster-peer ] peername -> remove peer from cluster"
-    echo "  ferrumgate [ --set-cluster-config ] -> change cluster config"
-    echo "  ferrumgate [ --set-redis-master ] -> change cluster config"
-    echo "  ferrumgate [ --remove-redis-master ] -> change cluster config"
+    echo "  ferrumgate [ --set-cluster-config ] config -> change cluster config"
     echo "  ferrumgate [ --show-es-peers ] -> shows es peers"
     echo "  ferrumgate [ --add-es-peer ] peerVariable -> add a peer to es ha"
     echo "  ferrumgate [ --remove-es-peer ] peername -> remove a peer from es ha"
     echo "  ferrumgate [ --all-logs ] shows all logs"
+    echo "  ferrumgate [ --upgrade-to-master ] make this host master"
+    echo "  ferrumgate [ --upgrade-to-node ] make this host node"
+    echo "  ferrumgate [ --show-config-all ] show all config"
+    echo "  ferrumgate [ --set-config-all ] configAsBase64 sets all config"
 
 }
 
 start_service() {
 
-    #systemctl start ferrumgate
-    start_gateways
+    start_base_and_gateways
     info "ferrumgate started"
     info "for more execute docker ps"
 }
 
 stop_service() {
 
-    #systemctl stop ferrumgate
-    stop_gateways
+    stop_base_and_gateways
     docker ps | grep "fg-" | tr -s ' ' | cut -d' ' -f 1 | xargs -r docker stop
     info "ferrumgate stopped"
     info "for more execute docker ps"
@@ -202,6 +203,7 @@ logs() {
 }
 
 list_gateways() {
+
     for file in $(ls $ETC_DIR); do
         local result=$(is_gateway_yaml $file)
         if [ ! -z $result ]; then
@@ -277,6 +279,7 @@ start_gateway() {
         -p fg-$gatewayId up -d --remove-orphans
 }
 prepare_env() {
+    # prepare redis
     local redis_host=$(get_config REDIS_HOST)
     local redis_ha_host=$(get_config REDIS_HA_HOST)
     local is_redis_clustered=$(get_config CLUSTER_REDIS_MASTER)
@@ -293,6 +296,18 @@ prepare_env() {
 
     fi
 
+    # prepare redis intel
+    local redis_intel_host=$(get_config REDIS_INTEL_HOST)
+    local redis_intel_ha_host=$(get_config REDIS_INTEL_HA_HOST)
+    local is_redis_intel_clustered=$(get_config CLUSTER_REDIS_INTEL_MASTER)
+    if [ -z "$is_redis_intel_clustered" ]; then
+        info "redis intel is not clustered"
+        set_config REDIS_INTEL_PROXY_HOST $redis_intel_host
+    else
+        info "redis intel is clustered"
+        set_config REDIS_INTEL_PROXY_HOST $redis_intel_ha_host
+    fi
+
     local es_host=$(get_config ES_HOST)
     local es_ha_host=$(get_config ES_HA_HOST)
     local is_es_clustered=$(get_config CLUSTER_ES_PEERS)
@@ -303,20 +318,26 @@ prepare_env() {
     fi
 }
 
-start_gateways() {
+start_base_and_gateways() {
     prepare_env
 
     if [ -z $(is_cluster_working) ]; then
         start_cluster
     fi
-    start_base
-    for file in $(ls $ETC_DIR); do
-        local result=$(is_gateway_yaml $file)
-        if [ ! -z $result ]; then
-            local gatewayId=$(echo "$file" | sed -e "s/gateway.//" -e "s/.yaml//")
-            start_gateway $gatewayId
-        fi
-    done
+
+    if [ -z $(is_master_host) ]; then
+        start_base
+    fi
+
+    if [ -z $(is_node_host) ]; then
+        for file in $(ls $ETC_DIR); do
+            local result=$(is_gateway_yaml $file)
+            if [ ! -z $result ]; then
+                local gatewayId=$(echo "$file" | sed -e "s/gateway.//" -e "s/.yaml//")
+                start_gateway $gatewayId
+            fi
+        done
+    fi
 
 }
 stop_gateway() {
@@ -332,7 +353,7 @@ stop_gateway() {
         -p fg-$gatewayId down
 }
 
-stop_gateways() {
+stop_base_and_gateways() {
 
     for file in $(ls $ETC_DIR); do
         local result=$(is_gateway_yaml $file)
@@ -371,77 +392,43 @@ get_config() {
     echo $value
 }
 
+get_config_from() {
+    if [ $# -lt 2 ]; then
+        error "no arguments supplied"
+        exit 1
+    fi
+
+    local key=$1
+    value=$(echo "$2" | grep $key= | cut -d"=" -f2-)
+    echo $value
+}
+
 show_config() {
     get_config $1
 }
 
-config() {
+change_config() {
     if [ $# -lt 1 ]; then
         error "no arguments supplied"
         exit 1
     fi
 
     local param=$1
+    local key=$(echo $param | cut -d'=' -f1)
+    local value=$(echo $param | cut -d'=' -f2-)
 
-    if [ $param = "redis" ]; then
+    if [ $key = "ES_HOST" ]; then
 
-        redis=$(get_config REDIS_HOST)
-        redis_pass=$(get_config REDIS_PASS)
-        echo "host: $redis"
-        echo "pass: $redis_pass"
-        read -p "do you want to change [Yn] " yesno
-        if [ $yesno = "Y" ]; then
-            read -p "enter host : " host
-            read -p "enter pass : " pass
+        set_config ES_HOST $value
+        set_config ES_INTEL_HOST $value
+    fi
+    if [ $key = "ES_PASS" ]; then
 
-            set_config REDIS_HOST $host
-            redis_host_ssh=$(echo $host | sed 's/:/#/g')
-            set_config REDIS_HOST_SSH $redis_host_ssh
-            set_config REDIS_PASS $pass
-
-            set_config REDIS_INTEL_HOST $host
-            set_config REDIS_INTEL_PASS $pass
-
-            if [ $host = "redis:6379" ]; then
-                set_config MODE single
-            else
-                set_config MODE cluster
-            fi
-            info "please restart ferrumgate"
-
-        fi
-        return
+        set_config ES_PASS $value
+        set_config ES_INTEL_PASS $value
     fi
 
-    if [ $param = "es" ]; then
-
-        es=$(get_config ES_HOST)
-        es_pass=$(get_config ES_PASS)
-        echo "host: $es"
-        echo "pass: $es_pass"
-        read -p "do you want to change [Yn] " yesno
-        if [ $yesno = "Y" ]; then
-            read -p "enter host : " host
-            read -p "enter pass : " pass
-
-            set_config ES_HOST $host
-            set_config ES_PASS $pass
-
-            set_config ES_INTEL_HOST $host
-            set_config ES_INTEL_PASS $pass
-            info "please restart ferrumgate"
-
-        fi
-        return
-    fi
-
-    value=$(get_config $param)
-    echo "value: $value"
-    read -p "do you want to change [Yn] " yesno
-    if [ $yesno = "Y" ]; then
-        read -p "enter value : " val
-        set_config $param $val
-    fi
+    set_config $key $value
 
 }
 all_logs() {
@@ -473,10 +460,11 @@ is_cluster_working() {
 stop_cluster() {
 
     if [ -z $(is_cluster_working) ]; then
+        info "cluster is not working"
         return
     fi
     wg-quick down wgferrum 2>/dev/null || true
-    ip link del dev wgferrum || true
+    ip link del dev wgferrum 2>/dev/null || true
     info "stoped cluster"
 }
 
@@ -562,6 +550,23 @@ show_cluster_info() {
 }
 
 show_cluster_config() {
+
+    local cluster_public_ip=$(get_config CLUSTER_NODE_PUBLIC_IP)
+    if [ -z "$cluster_public_ip" ]; then
+        echo "please set host public ip and port that other cluster hosts can reach this, with below commands"
+        echo "ferrumgate --set-config CLUSTER_NODE_PUBLIC_IP=ip"
+        echo "ferrumgate --set-config CLUSTER_NODE_PUBLIC_PORT=port"
+        return
+    fi
+
+    local cluster_public_port=$(get_config CLUSTER_NODE_PUBLIC_PORT)
+    if [ -z "$cluster_public_port" ]; then
+        echo "please set host public ip that other cluster hosts can reach this, with below commands"
+        echo "ferrumgate --set-config CLUSTER_NODE_PUBLIC_IP=ip"
+        echo "ferrumgate --set-config CLUSTER_NODE_PUBLIC_PORT=port"
+        return
+    fi
+
     local node_host=$(get_config CLUSTER_NODE_HOST)
     local node_ip=$(get_config CLUSTER_NODE_IP)
     local node_port=$(get_config CLUSTER_NODE_PORT)
@@ -573,15 +578,7 @@ show_cluster_config() {
     for line in $node_peers; do
         echo $line
     done
-    local cluster_public_ip=$CLUSTER_PUBLIC_IP
-    if [ -z "$cluster_public_ip" ]; then
-        cluster_public_ip="public_ip"
-    fi
 
-    local cluster_public_port=$CLUSTER_PUBLIC_PORT
-    if [ -z "$cluster_public_port" ]; then
-        cluster_public_port="port"
-    fi
     echo ""
     echo "**** current host *****"
     echo "host: $node_host"
@@ -593,6 +590,9 @@ show_cluster_config() {
     echo "PEER=\"$node_host/$cluster_public_ip:$cluster_public_port/$node_ip/$node_public_key\""
     echo "ferrumgate --add-cluster-peer \$PEER"
     echo "wg set wgferrum peer $(echo $node_public_key | xxd -r -p | base64) allowed-ips $node_ip"
+    echo "******************************************************************************"
+    echo "PEER=$node_host/$cluster_public_ip:$cluster_public_port/$node_ip/$node_public_key"
+
 }
 
 add_cluster_peer() {
@@ -608,9 +608,10 @@ add_cluster_peer() {
     local input_host=$(echo $input | cut -d'/' -f1)
 
     if [ $input_host = $node_host ]; then
-        error "you can not add this host to peers"
+        error "you can not add this host to cluster peers"
         return
     fi
+
     local peer=""
     for line in $node_peers; do
         local host=$(echo $line | cut -d'/' -f1)
@@ -619,6 +620,7 @@ add_cluster_peer() {
         fi
     done
     peer="$peer $input"
+    peer=$(echo $peer) #trim
 
     set_config CLUSTER_NODE_PEERS "$peer"
     info "added to peers"
@@ -689,44 +691,6 @@ set_cluster_config() {
 
 }
 
-set_redis_master() {
-    echo "current master is: $(get_config CLUSTER_REDIS_MASTER)"
-    read -p "enter ip: " ip
-    read -p "are you sure [Yn] " yesno
-    if [ $yesno = "Y" ]; then
-        set_config CLUSTER_REDIS_MASTER $ip
-        info "redis master changed"
-    fi
-
-}
-remove_redis_master() {
-    echo "current master is: $(get_config CLUSTER_REDIS_MASTER)"
-    read -p "are you sure [Yn] " yesno
-    if [ $yesno = "Y" ]; then
-        set_config CLUSTER_REDIS_MASTER ""
-        info "redis master deleted"
-    fi
-
-}
-
-show_es_peers() {
-    local node_host=$(get_config CLUSTER_NODE_HOST)
-    local node_ip=$(get_config CLUSTER_NODE_IP)
-
-    local node_peers=$(get_config CLUSTER_ES_PEERS)
-    echo ""
-    echo "**** current peers *****"
-    for line in $node_peers; do
-        echo $line
-    done
-
-    echo ""
-
-    echo "**** commands **********"
-    echo "PEER=\"$node_host/$node_ip\""
-    echo "ferrumgate --add-es-peer \$PEER"
-}
-
 add_es_peer() {
     if [ $# -lt 1 ]; then
         error "no arguments supplied"
@@ -734,31 +698,24 @@ add_es_peer() {
     fi
 
     local input=$1
-    local node_peers=$(get_config CLUSTER_ES_PEERS)
+    local es_peers=$(get_config CLUSTER_ES_PEERS)
     local node_host=$(get_config CLUSTER_NODE_HOST)
     local node_ip=$(get_config CLUSTER_NODE_IP)
     local input_host=$(echo $input | cut -d'/' -f1)
+    local input_ip=$(echo $input | cut -d'/' -f3)
 
     local peer=""
-    for line in $node_peers; do
+    for line in $es_peers; do
         local host=$(echo $line | cut -d'/' -f1)
         if [ $host != $input_host ]; then
-            if [ -z "$peer" ]; then
-                peer="$line"
-            else
-                peer="$peer $line"
-            fi
+            peer="$peer $line"
         fi
     done
-
-    if [ -z "$peer" ]; then
-        peer="$input"
-    else
-        peer="$peer $input"
-    fi
+    peer="$peer $input_host/$input_ip"
+    peer=$(echo $peer) #trim
 
     set_config CLUSTER_ES_PEERS "$peer"
-    info "added to peers"
+    info "added to es peers"
 }
 
 remove_es_peer() {
@@ -768,13 +725,13 @@ remove_es_peer() {
     fi
 
     local input=$1
-    local node_peers=$(get_config CLUSTER_ES_PEERS)
+    local es_peers=$(get_config CLUSTER_ES_PEERS)
     local node_host=$(get_config CLUSTER_NODE_HOST)
     local node_ip=$(get_config CLUSTER_NODE_IP)
     local input_host=$(echo $input | cut -d'/' -f1)
 
     local peer=""
-    for line in $node_peers; do
+    for line in $es_peers; do
         local host=$(echo $line | cut -d'/' -f1)
         if [ $host != $input_host ]; then
             if [ -z "$peer" ]; then
@@ -789,6 +746,137 @@ remove_es_peer() {
     info "removed from peers"
 }
 
+is_master_host() {
+    local role=$(get_config ROLE)
+    if [ $role = "master" ] || [ $role = "master:node" ]; then
+        echo ""
+    else
+        echo "no"
+    fi
+}
+
+is_node_host() {
+    local role=$(get_config ROLE)
+    if [ $role = "node" ] || [ $role = "master:node" ]; then
+        echo ""
+    else
+        echo "no"
+    fi
+}
+
+upgrade_to_master() {
+    info "changing host role to master"
+    read -p "are you sure [Yn] " yesno
+    if [ $yesno = "Y" ]; then
+        set_config ROLE "master"
+    fi
+}
+upgrade_to_node() {
+    info "changing host role to node"
+    read -p "are you sure [Yn] " yesno
+    if [ $yesno = "Y" ]; then
+        set_config ROLE "node"
+    fi
+}
+
+show_config_all() {
+    cat /etc/ferrumgate/env
+    echo "**********************************************"
+
+    echo "ferrumgate --set-config-all \"$(cat /etc/ferrumgate/env | base64 -w 0)\""
+
+}
+
+set_config_all() {
+    if [ $# -lt 1 ]; then
+        error "no arguments supplied"
+        exit 1
+    fi
+
+    local input=$(echo "$1" | base64 -d)
+
+    local redis_pass=$(get_config_from REDIS_PASS "$input")
+    set_config REDIS_PASS $redis_pass
+
+    local redis_local_pass=$(get_config_from REDIS_LOCAL_PASS "$input")
+    set_config REDIS_LOCAL_PASS $redis_local_pass
+
+    local redis_intel_pass=$(get_config_from REDIS_INTEL_PASS "$input")
+    set_config REDIS_INTEL_PASS $redis_intel_pass
+
+    local encrypt_key=$(get_config_from ENCRYPT_KEY "$input")
+    set_config ENCRYPT_KEY $encrypt_key
+
+    local es_pass=$(get_config_from ES_PASS "$input")
+    set_config ES_PASS $es_pass
+
+    local es_intel_pass=$(get_config_from ES_INTEL_PASS "$input")
+    set_config ES_INTEL_PASS $es_intel_pass
+
+}
+
+create_redis_cluster() {
+    if [ $# -lt 1 ]; then
+        error "no arguments supplied"
+        exit 1
+    fi
+
+    local redis_pass=$(get_config REDIS_PASS)
+    local node_host=$(get_config CLUSTER_NODE_HOST)
+    local node_ip=$(get_config CLUSTER_NODE_IP)
+    counter=0
+    local peers=$1
+    local master_host=
+    local master_ip=
+    # find master host and ip
+    for line in $(echo "$peers" | tr " " "\n"); do
+        counter=$((counter + 1))
+        local data=$(echo $line | cut -d'=' -f2)
+        peer_host=$(echo $data | cut -d'/' -f1)
+        peer_ip=$(echo $data | cut -d'/' -f3)
+        if [ $counter -eq 1 ]; then
+            master_host=$peer_host
+            master_ip=$peer_ip
+        fi
+    done
+
+    set_config CLUSTER_REDIS_MASTER $master_ip
+    set_config CLUSTER_REDIS_INTEL_MASTER $master_ip
+
+    if [ $node_host != $master_host ]; then # this is not master machine
+        info "creating redis cluster"
+        ## prepare redis
+        local port=6379
+        docker run redis:7-bullseye redis-cli --no-auth-warning -h $node_ip -p $port --pass $redis_pass replicaof $master_ip $port
+        docker run redis:7-bullseye redis-cli --no-auth-warning -h $node_ip -p $port --pass $redis_pass config rewrite
+        port=6380
+        docker run redis:7-bullseye redis-cli --no-auth-warning -h $node_ip -p $port --pass $redis_pass replicaof $master_ip $port
+        docker run redis:7-bullseye redis-cli --no-auth-warning -h $node_ip -p $port --pass $redis_pass config rewrite
+    fi
+
+}
+
+create_cluster() {
+    read -p "do you want to continue [Yn] " yesno
+    if [ $yesno = "Y" ]; then
+        echo "paste peers and ctrl-d when done:"
+        local peers=$(cat)
+        set_config CLUSTER_NODE_PEERS ""
+        set_config CLUSTER_ES_PEERS ""
+        for line in $(echo "$peers" | tr " " "\n"); do
+            echo $line
+            local tmp=$(echo $line | cut -d'=' -f2-)
+            info "adding $tmp"
+            add_cluster_peer "$tmp"
+            add_es_peer "$tmp"
+        done
+        start_cluster
+
+        create_redis_cluster "$peers"
+    fi
+
+}
+
 main() {
     ensure_root
 
@@ -796,8 +884,8 @@ main() {
     help,start,stop,restart,status,uninstall,\
     logs:,\
     gateway:,\
-    start-gateways,\
-    stop-gateways,\
+    start-base-and-gateways,\
+    stop-base-and-gateways,\
     list-gateways,\
     start-gateway:,\
     stop-gateway:,\
@@ -814,14 +902,18 @@ main() {
     set-cluster-config,\
     set-redis-master,\
     remove-redis-master,\
-    show-es-peers,\
     add-es-peer:,\
     remove-es-peer:,\
     show-config:,\
     set-config:,\
     version,\
+    upgrade-to-master,\
+    upgrade-to-node,\
+    show-config-all,\
+    set-config-all:,\
+    create-cluster,\
     all-logs' -- "$@") || exit
-    eval "set -- $ARGS"
+    eval set -- "$ARGS"
     local service_name=''
     local gateway_id=''
     local parameter_name=''
@@ -868,12 +960,12 @@ main() {
             shift
             break
             ;;
-        --start-gateways)
+        --start-base-and-gateways)
             opt=8
             shift
             break
             ;;
-        --stop-gateways)
+        --stop-base-and-gateways)
             opt=9
             shift
             break
@@ -953,21 +1045,6 @@ main() {
             shift
             break
             ;;
-        --set-redis-master)
-            opt=24
-            shift
-            break
-            ;;
-        --remove-redis-master)
-            opt=25
-            shift
-            break
-            ;;
-        --show-es-peers)
-            opt=26
-            shift
-            break
-            ;;
         --add-es-peer)
             opt=27
             parameter_name="$2"
@@ -1002,6 +1079,32 @@ main() {
             shift
             break
             ;;
+        --upgrade-to-master)
+            opt=33
+            shift
+            break
+            ;;
+        --upgrade-to-node)
+            opt=34
+            shift
+            break
+            ;;
+        --show-config-all)
+            opt=35
+            shift
+            break
+            ;;
+        --set-config-all)
+            opt=36
+            parameter_name="$2"
+            shift 2
+            break
+            ;;
+        --create-cluster)
+            opt=37
+            shift
+            break
+            ;;
         --)
             shift
             break
@@ -1024,8 +1127,8 @@ main() {
     [ $opt -eq 5 ] && status_service && exit 0
     [ $opt -eq 6 ] && logs $gateway_id $service_name && exit 0
     [ $opt -eq 7 ] && uninstall && exit 0
-    [ $opt -eq 8 ] && start_gateways && exit 0
-    [ $opt -eq 9 ] && stop_gateways && exit 0
+    [ $opt -eq 8 ] && start_base_and_gateways && exit 0
+    [ $opt -eq 9 ] && stop_base_and_gateways && exit 0
     [ $opt -eq 10 ] && list_gateways && exit 0
     [ $opt -eq 11 ] && start_gateway $gateway_id && exit 0
     [ $opt -eq 12 ] && stop_gateway $gateway_id && exit 0
@@ -1040,15 +1143,18 @@ main() {
     [ $opt -eq 21 ] && add_cluster_peer $parameter_name && exit 0
     [ $opt -eq 22 ] && remove_cluster_peer $parameter_name && exit 0
     [ $opt -eq 23 ] && set_cluster_config && exit 0
-    [ $opt -eq 24 ] && set_redis_master && exit 0
-    [ $opt -eq 25 ] && remove_redis_master && exit 0
     [ $opt -eq 26 ] && show_es_peers && exit 0
     [ $opt -eq 27 ] && add_es_peer $parameter_name && exit 0
     [ $opt -eq 28 ] && remove_es_peer $parameter_name && exit 0
     [ $opt -eq 29 ] && show_config $parameter_name && exit 0
-    [ $opt -eq 30 ] && config $parameter_name && exit 0
+    [ $opt -eq 30 ] && change_config $parameter_name && exit 0
     [ $opt -eq 31 ] && show_version && exit 0
     [ $opt -eq 32 ] && all_logs $parameter_name && exit 0
+    [ $opt -eq 33 ] && upgrade_to_master && exit 0
+    [ $opt -eq 34 ] && upgrade_to_node && exit 0
+    [ $opt -eq 35 ] && show_config_all && exit 0
+    [ $opt -eq 36 ] && set_config_all $parameter_name && exit 0
+    [ $opt -eq 37 ] && create_cluster $parameter_name && exit 0
 
 }
 

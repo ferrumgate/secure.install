@@ -94,7 +94,7 @@ download() {
     # Abort if download command failed
     [ $? -eq 0 ] || fatal 'Download failed'
 }
-VERSION=1.16.0
+VERSION=1.17.0
 download_and_verify() {
     if [ -d "./secure.install" ]; then
         rm -rf secure.install
@@ -133,8 +133,8 @@ After=docker.service
 Type=oneshot
 RemainAfterExit=true
 WorkingDirectory=/etc/ferrumgate
-ExecStart=ferrumgate --start-gateways
-ExecStop=ferrumgate --stop-gateways
+ExecStart=ferrumgate --start-base-and-gateways
+ExecStop=ferrumgate --stop-base-and-gateways
 
 [Install]
 WantedBy=multi-user.target
@@ -183,6 +183,7 @@ create_cluster_ip() {
     local random=$(shuf -i 1-254 -n1)
     echo "169.254.254.$random"
 }
+
 create_cluster_private_key() {
     wg genkey | base64 -d | xxd -p -c 256
 }
@@ -289,7 +290,7 @@ main() {
 
         REDIS_LOCAL_HOST=$(get_config REDIS_LOCAL_HOST)
         if [ -z "$REDIS_LOCAL_HOST" ]; then
-            REDIS_LOCAL_HOST=redis-local:6379
+            REDIS_LOCAL_HOST=redis-local:6381
         fi
 
         REDIS_LOCAL_PASS=$(get_config REDIS_LOCAL_PASS)
@@ -299,7 +300,12 @@ main() {
 
         REDIS_INTEL_HOST=$(get_config REDIS_INTEL_HOST)
         if [ -z "$REDIS_INTEL_HOST" ]; then
-            REDIS_INTEL_HOST=redis:6379
+            REDIS_INTEL_HOST=redis-intel:6380
+        fi
+
+        REDIS_INTEL_HA_HOST=$(get_config REDIS_INTEL_HA_HOST)
+        if [ -z "$REDIS_INTEL_HA_HOST" ]; then
+            REDIS_INTEL_HA_HOST="redis-intel-ha:6380"
         fi
 
         REDIS_INTEL_PASS=$(get_config REDIS_INTEL_PASS)
@@ -403,6 +409,13 @@ main() {
         if [ -z $CLUSTER_REDIS_QUORUM ]; then
             CLUSTER_REDIS_QUORUM=2
         fi
+
+        CLUSTER_REDIS_INTEL_MASTER=$(get_config CLUSTER_REDIS_INTEL_MASTER)
+        CLUSTER_REDIS_INTEL_QUORUM=$(get_config CLUSTER_REDIS_INTEL_QUORUM)
+        if [ -z $CLUSTER_REDIS_INTEL_QUORUM ]; then
+            CLUSTER_REDIS_INTEL_QUORUM=2
+        fi
+
         CLUSTER_ES_PEERS=$(get_config CLUSTER_ES_PEERS)
         if [ -z "$CLUSTER_ES_PEERS" ]; then
             CLUSTER_ES_PEERS=""
@@ -437,6 +450,7 @@ main() {
 
         cat >$ENV_FILE_ETC <<EOF
 DEPLOY=docker
+ROLE=master:node
 DEPLOY_ID=$DEPLOY_ID
 REDIS_HOST=$REDIS_HOST
 REDIS_HA_HOST=$REDIS_HA_HOST
@@ -446,6 +460,8 @@ REDIS_PASS=$REDIS_PASS
 REDIS_LOCAL_HOST=$REDIS_LOCAL_HOST
 REDIS_LOCAL_PASS=$REDIS_LOCAL_PASS
 REDIS_INTEL_HOST=$REDIS_INTEL_HOST
+REDIS_INTEL_HA_HOST=$REDIS_INTEL_HA_HOST
+REDIS_INTEL_PROXY_HOST=
 REDIS_INTEL_PASS=$REDIS_INTEL_PASS
 ENCRYPT_KEY=$ENCRYPT_KEY
 ES_HOST=$ES_HOST
@@ -469,7 +485,11 @@ CLUSTER_NODE_PUBLIC_KEY=$CLUSTER_NODE_PUBLIC_KEY
 CLUSTER_NODE_PEERS=$CLUSTER_NODE_PEERS
 CLUSTER_REDIS_MASTER=$CLUSTER_REDIS_MASTER
 CLUSTER_REDIS_QUORUM=$CLUSTER_REDIS_QUORUM
+CLUSTER_REDIS_INTEL_MASTER=$CLUSTER_REDIS_INTEL_MASTER
+CLUSTER_REDIS_INTEL_QUORUM=$CLUSTER_REDIS_INTEL_QUORUM
 CLUSTER_ES_PEERS=$CLUSTER_ES_PEERS
+CLUSTER_NODE_PUBLIC_IP=
+CLUSTER_NODE_PUBLIC_PORT=
 
 EOF
 
