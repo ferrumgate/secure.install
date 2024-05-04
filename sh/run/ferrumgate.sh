@@ -72,6 +72,7 @@ print_usage() {
     echo "  ferrumgate [ --create-cluster ] -> create a cluster"
     echo "  ferrumgate [ --start-cluster ] -> starts cluster"
     echo "  ferrumgate [ --stop-cluster ] -> stop cluster"
+    echo "  ferrumgate [ --restart-cluster ] -> restart cluster"
     echo "  ferrumgate [ --status-cluster ] -> cluster status"
     echo "  ferrumgate [ --recreate-cluster-keys ] -> recreate cluster keys"
     echo "  ferrumgate [ --show-cluster-config ] -> show cluster config"
@@ -83,7 +84,7 @@ print_usage() {
     echo "  ferrumgate [ --remove-es-peer ] peername -> remove a peer from es ha"
     echo "  ferrumgate [ --all-logs ] shows all logs"
     echo "  ferrumgate [ --upgrade-to-master ] make this host master"
-    echo "  ferrumgate [ --upgrade-to-node ] make this host node"
+    echo "  ferrumgate [ --upgrade-to-worker ] make this host worker"
     echo "  ferrumgate [ --show-config-all ] show all config"
     echo "  ferrumgate [ --set-config-all ] configAsBase64 sets all config"
 
@@ -275,9 +276,50 @@ start_gateway() {
 
     local gatewayId=$1
     info "starting gateway $gatewayId"
-    docker compose -f $ETC_DIR/gateway.$gatewayId.yaml --env-file $ETC_DIR/env \
+    local FILE=$ETC_DIR/gateway.$gatewayId.yaml
+    # just worker node
+    if [ $(is_worker_host) = "yes" ] && [ $(is_master_host) = "no" ]; then
+        info "this is a worker node"
+        sed -i "s|external:.*|external: false|g" $FILE
+        yq -yi ".services.\"server-quic\".extra_hosts[0] |= \"registry.ferrumgate.zero:192.168.88.40\"" $FILE
+        local peers=$(get_config CLUSTER_NODE_PEERSW)
+        if [ ! -z $peers ]; then
+            local tmp=$(echo $peers | cut -d'=' -f2-)
+            local ip=$(echo $tmp | cut -d'/' -f3)
+            yq -yi ".services.\"server-quic\".extra_hosts[1] |= \"redis-ha:$ip\"" $FILE
+            yq -yi ".services.\"server-quic\".extra_hosts[2] |= \"redis-local:$ip\"" $FILE
+            yq -yi ".services.\"server-quic\".extra_hosts[3] |= \"es-ha:$ip\"" $FILE
+            yq -yi ".services.\"server-quic\".extra_hosts[4] |= \"log:$ip\"" $FILE
+        fi
+
+    else
+        sed -i "s|external:.*|external: true|g" $FILE
+        yq -yi ".services.\"server-quic\".extra_hosts[0] |= \"registry.ferrumgate.zero:192.168.88.40\"" $FILE
+    fi
+    docker compose -f $FILE --env-file $ETC_DIR/env \
         -p fg-$gatewayId up -d --remove-orphans
 }
+
+is_master_host() {
+    local role=$(get_config ROLE)
+    local count=$(echo $role | grep "master" | wc -l)
+    if [ ! $count -eq "0" ]; then
+        echo "yes"
+    else
+        echo "no"
+    fi
+}
+
+is_worker_host() {
+    local role=$(get_config ROLE)
+    local count=$(echo $role | grep "worker" | wc -l)
+    if [ ! $count -eq "0" ]; then
+        echo "yes"
+    else
+        echo "no"
+    fi
+}
+
 prepare_env() {
     # prepare redis
     local redis_host=$(get_config REDIS_HOST)
@@ -316,20 +358,29 @@ prepare_env() {
     else
         set_config ES_PROXY_HOST $es_ha_host
     fi
+
+    if [ $(is_master_host) = "no" ] && [ $(is_worker_host) = "yes" ]; then
+        #if this is a worker host
+        set_config ES_PROXY_HOST $es_ha_host
+        set_config REDIS_PROXY_HOST $redis_ha_host
+        local redis_host_ssh=$(echo $redis_ha_host | sed 's/:/#/g')
+        set_config REDIS_HOST_SSH $redis_host_ssh
+
+    fi
 }
 
 start_base_and_gateways() {
     prepare_env
 
-    if [ -z $(is_cluster_working) ]; then
+    if [ $(is_cluster_working) = "no" ]; then
         start_cluster
     fi
 
-    if [ -z $(is_master_host) ]; then
+    if [ $(is_master_host) = "yes" ]; then
         start_base
     fi
 
-    if [ -z $(is_node_host) ]; then
+    if [ $(is_worker_host) = "yes" ]; then
         for file in $(ls $ETC_DIR); do
             local result=$(is_gateway_yaml $file)
             if [ ! -z $result ]; then
@@ -453,18 +504,26 @@ cluster_info() {
 is_cluster_working() {
     local count=$(ip a | grep wgferrum | wc -l)
     if [ ! $count -eq "0" ]; then
-        echo "running"
+        echo "yes"
+    else
+        echo "no"
     fi
 }
 
 stop_cluster() {
 
-    if [ -z $(is_cluster_working) ]; then
+    if [ $(is_cluster_working) = "no" ]; then
         info "cluster is not working"
         return
     fi
+    info "stoping wgferrum"
     wg-quick down wgferrum 2>/dev/null || true
     ip link del dev wgferrum 2>/dev/null || true
+
+    info "stoping wgferrumw"
+    wg-quick down wgferrumw 2>/dev/null || true
+    ip link del dev wgferrumw 2>/dev/null || true
+
     info "stoped cluster"
 }
 
@@ -492,13 +551,7 @@ start_cluster() {
         warn "cluster node public key is needed"
         return
     fi
-    if [ -z "$node_peers" ]; then
-        warn "cluster peers is needed"
-        ip link add dev wgferrum type wireguard || true
-        ip address add dev wgferrum $node_ip/32 || true
-        ip link set up dev wgferrum || true
-        return
-    fi
+
     FILE=/etc/wireguard/wgferrum.conf
     echo "[Interface]" >$FILE
     echo "Address=$node_ip/32" >>$FILE
@@ -512,9 +565,30 @@ start_cluster() {
         echo ""
     done
 
+    # start worker interfaces
+    local node_ip=$(get_config CLUSTER_NODE_IPW)
+    local node_port=$(get_config CLUSTER_NODE_PORTW)
+
+    FILE=/etc/wireguard/wgferrumw.conf
+    echo "[Interface]" >$FILE
+    echo "Address=$node_ip/32" >>$FILE
+    echo "ListenPort=$node_port" >>$FILE
+    echo "PrivateKey=$(echo $node_private_key | xxd -r -p | base64)" >>$FILE
+    local node_peersw=$(get_config CLUSTER_NODE_PEERSW)
+    for line in $node_peersw; do
+        echo "[Peer]" >>$FILE
+        echo "Endpoint=$(echo $line | cut -d'/' -f2)" >>$FILE
+        echo "AllowedIPs=$(echo $line | cut -d'/' -f3)" >>$FILE
+        echo "PublicKey=$(echo $line | cut -d'/' -f4 | xxd -r -p | base64)" >>$FILE
+        echo ""
+    done
+
+    info "starting wgferrum"
     wg-quick up wgferrum
-    #ip link add dev wgferrum type wireguard || true
-    #wg set wgferrum listen-port $node_port private-key /path/to/private-key peer ABCDEF... allowed-ips 192.168.88.0/24 endpoint 209.202.254.14:8172
+
+    info "starting wgferrumw"
+    wg-quick up wgferrumw
+
     info "started cluster"
 
 }
@@ -552,24 +626,42 @@ show_cluster_info() {
 show_cluster_config() {
 
     local cluster_public_ip=$(get_config CLUSTER_NODE_PUBLIC_IP)
-    if [ -z "$cluster_public_ip" ]; then
-        echo "please set host public ip and port that other cluster hosts can reach this, with below commands"
-        echo "ferrumgate --set-config CLUSTER_NODE_PUBLIC_IP=ip"
-        echo "ferrumgate --set-config CLUSTER_NODE_PUBLIC_PORT=port"
+    if [ -z "$cluster_public_ip" ] && [ $(is_master_host) = "yes" ]; then
+        echo "please set host public ip and port that other master hosts can reach master, with below commands"
+        echo "ferrumgate --set-config CLUSTER_NODE_PUBLIC_IP=\$IP"
+        echo "ferrumgate --set-config CLUSTER_NODE_PUBLIC_PORT=\$PORT"
         return
     fi
 
     local cluster_public_port=$(get_config CLUSTER_NODE_PUBLIC_PORT)
-    if [ -z "$cluster_public_port" ]; then
-        echo "please set host public ip that other cluster hosts can reach this, with below commands"
-        echo "ferrumgate --set-config CLUSTER_NODE_PUBLIC_IP=ip"
-        echo "ferrumgate --set-config CLUSTER_NODE_PUBLIC_PORT=port"
+    if [ -z "$cluster_public_port" ] && [ $(is_master_host) = "yes" ]; then
+        echo "please set host public ip that other master hosts can reach to this master, with below commands"
+        echo "ferrumgate --set-config CLUSTER_NODE_PUBLIC_IP=\$IP"
+        echo "ferrumgate --set-config CLUSTER_NODE_PUBLIC_PORT=\$PORT"
+        return
+    fi
+
+    local cluster_public_ipw=$(get_config CLUSTER_NODE_PUBLIC_IPW)
+    if [ -z "$cluster_public_ipw" ]; then
+        echo "please set host public ip and port that worker hosts can reach to master, with below commands"
+        echo "ferrumgate --set-config CLUSTER_NODE_PUBLIC_IPW=\$IP"
+        echo "ferrumgate --set-config CLUSTER_NODE_PUBLIC_PORTW=\$PORT"
+        return
+    fi
+
+    local cluster_public_portw=$(get_config CLUSTER_NODE_PUBLIC_PORTW)
+    if [ -z "$cluster_public_portw" ]; then
+        echo "please set host public ip that worker hosts can reach to master, with below commands"
+        echo "ferrumgate --set-config CLUSTER_NODE_PUBLIC_IPW=\$IP"
+        echo "ferrumgate --set-config CLUSTER_NODE_PUBLIC_PORTW=\$PORT"
         return
     fi
 
     local node_host=$(get_config CLUSTER_NODE_HOST)
     local node_ip=$(get_config CLUSTER_NODE_IP)
     local node_port=$(get_config CLUSTER_NODE_PORT)
+    local node_ipw=$(get_config CLUSTER_NODE_IPW)
+    local node_portw=$(get_config CLUSTER_NODE_PORTW)
     local node_public_key=$(get_config CLUSTER_NODE_PUBLIC_KEY)
 
     local node_peers=$(get_config CLUSTER_NODE_PEERS)
@@ -591,7 +683,12 @@ show_cluster_config() {
     echo "ferrumgate --add-cluster-peer \$PEER"
     echo "wg set wgferrum peer $(echo $node_public_key | xxd -r -p | base64) allowed-ips $node_ip"
     echo "******************************************************************************"
-    echo "PEER=$node_host/$cluster_public_ip:$cluster_public_port/$node_ip/$node_public_key"
+    if [ $(is_master_host) = "yes" ]; then
+        echo "PEER=$node_host/$cluster_public_ip:$cluster_public_port/$node_ip/$node_public_key"
+        echo "PEERW=$node_host/$cluster_public_ipw:$cluster_public_portw/$node_ipw/$node_public_key"
+    else
+        echo "PEERW=$node_host/$cluster_public_ipw:$cluster_public_portw/$node_ipw/$node_public_key"
+    fi
 
 }
 
@@ -746,24 +843,6 @@ remove_es_peer() {
     info "removed from peers"
 }
 
-is_master_host() {
-    local role=$(get_config ROLE)
-    if [ $role = "master" ] || [ $role = "master:node" ]; then
-        echo ""
-    else
-        echo "no"
-    fi
-}
-
-is_node_host() {
-    local role=$(get_config ROLE)
-    if [ $role = "node" ] || [ $role = "master:node" ]; then
-        echo ""
-    else
-        echo "no"
-    fi
-}
-
 upgrade_to_master() {
     info "changing host role to master"
     read -p "are you sure [Yn] " yesno
@@ -771,11 +850,11 @@ upgrade_to_master() {
         set_config ROLE "master"
     fi
 }
-upgrade_to_node() {
-    info "changing host role to node"
+upgrade_to_worker() {
+    info "changing host role to worker"
     read -p "are you sure [Yn] " yesno
     if [ $yesno = "Y" ]; then
-        set_config ROLE "node"
+        set_config ROLE "worker"
     fi
 }
 
@@ -784,7 +863,6 @@ show_config_all() {
     echo "**********************************************"
 
     echo "ferrumgate --set-config-all \"$(cat /etc/ferrumgate/env | base64 -w 0)\""
-
 }
 
 set_config_all() {
@@ -812,6 +890,12 @@ set_config_all() {
 
     local es_intel_pass=$(get_config_from ES_INTEL_PASS "$input")
     set_config ES_INTEL_PASS $es_intel_pass
+    if [ $(is_master_host) = "yes" ]; then
+        local node_ipw=$(get_config_from CLUSTER_NODE_IPW "$input")
+        set_config CLUSTER_NODE_IPW $node_ipw
+        local node_portw=$(get_config_from CLUSTER_NODE_PORTW "$input")
+        set_config CLUSTER_NODE_PORTW $node_portw
+    fi
 
 }
 
@@ -864,17 +948,75 @@ create_cluster() {
         set_config CLUSTER_NODE_PEERS ""
         set_config CLUSTER_ES_PEERS ""
         for line in $(echo "$peers" | tr " " "\n"); do
-            echo $line
-            local tmp=$(echo $line | cut -d'=' -f2-)
-            info "adding $tmp"
-            add_cluster_peer "$tmp"
-            add_es_peer "$tmp"
+            local peer=$(echo $line | cut -d'=' -f1)
+            if [ $peer = "PEER" ]; then
+                local tmp=$(echo $line | cut -d'=' -f2-)
+                info "adding $tmp"
+                add_cluster_peer "$tmp"
+                add_es_peer "$tmp"
+            fi
         done
         start_cluster
 
         create_redis_cluster "$peers"
     fi
 
+}
+
+cluster_add_worker() {
+    if [ $(is_master_host) = "no" ]; then
+        error "only master can add worker"
+        info "ferrumgate --update-to-master"
+        return
+    fi
+
+    read -p "do you want to continue [Yn] " yesno
+    if [ $yesno = "Y" ]; then
+        echo "paste peers and ctrl-d when done:"
+        local saved_peers=$(get_config CLUSTER_NODE_PEERSW)
+        local peers=$(cat)
+        set_config CLUSTER_NODE_PEERSW ""
+        for line in $(echo "$peers" | tr " " "\n"); do
+            local peer=$(echo $line | cut -d'=' -f1)
+            if [ $peer = "PEERW" ]; then
+                local tmp=$(echo $line | cut -d'=' -f2-)
+                info "adding $tmp"
+                if [ -z $saved_peers ]; then
+                    saved_peers=$(echo "$tmp")
+                else
+                    saved_peers=$(echo "$saved_peers $tmp")
+                fi
+            fi
+        done
+        set_config CLUSTER_NODE_PEERSW $saved_peers
+        start_cluster
+    fi
+}
+cluster_join() {
+
+    if [ $(is_worker_host) = "yes" ] && [ $(is_master_host) = "no" ]; then
+        echo -n ""
+    else
+        error "only worker can join"
+        info "ferrumgate --upgrade-to-worker"
+        return
+    fi
+
+    read -p "do you want to continue [Yn] " yesno
+    if [ $yesno = "Y" ]; then
+        echo "paste peer and ctrl-d when done:"
+        local peers=$(cat)
+        set_config CLUSTER_NODE_PEERSW ""
+        for line in $(echo "$peers" | tr " " "\n"); do
+            local peer=$(echo $line | cut -d'=' -f1)
+            if [ $peer = "PEERW" ]; then
+                local tmp=$(echo $line | cut -d'=' -f2-)
+                set_config CLUSTER_NODE_PEERSW $tmp
+                break
+            fi
+        done
+        start_cluster
+    fi
 }
 
 main() {
@@ -894,6 +1036,7 @@ main() {
     recreate-gateway,\
     start-cluster,\
     stop-cluster,\
+    restart-cluster,\
     status-cluster,\
     recreate-cluster-keys,\
     show-cluster-config,\
@@ -908,10 +1051,12 @@ main() {
     set-config:,\
     version,\
     upgrade-to-master,\
-    upgrade-to-node,\
+    upgrade-to-worker,\
     show-config-all,\
     set-config-all:,\
     create-cluster,\
+    cluster-add-worker,\
+    cluster-join,\
     all-logs' -- "$@") || exit
     eval set -- "$ARGS"
     local service_name=''
@@ -1084,7 +1229,7 @@ main() {
             shift
             break
             ;;
-        --upgrade-to-node)
+        --upgrade-to-worker)
             opt=34
             shift
             break
@@ -1102,6 +1247,21 @@ main() {
             ;;
         --create-cluster)
             opt=37
+            shift
+            break
+            ;;
+        --cluster-add-worker)
+            opt=38
+            shift
+            break
+            ;;
+        --cluster-join)
+            opt=39
+            shift
+            break
+            ;;
+        --restart-cluster)
+            opt=40
             shift
             break
             ;;
@@ -1151,10 +1311,13 @@ main() {
     [ $opt -eq 31 ] && show_version && exit 0
     [ $opt -eq 32 ] && all_logs $parameter_name && exit 0
     [ $opt -eq 33 ] && upgrade_to_master && exit 0
-    [ $opt -eq 34 ] && upgrade_to_node && exit 0
+    [ $opt -eq 34 ] && upgrade_to_worker && exit 0
     [ $opt -eq 35 ] && show_config_all && exit 0
     [ $opt -eq 36 ] && set_config_all $parameter_name && exit 0
     [ $opt -eq 37 ] && create_cluster $parameter_name && exit 0
+    [ $opt -eq 38 ] && cluster_add_worker $parameter_name && exit 0
+    [ $opt -eq 39 ] && cluster_join $parameter_name && exit 0
+    [ $opt -eq 40 ] && start_cluster && exit 0
 
 }
 

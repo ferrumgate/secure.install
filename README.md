@@ -16,6 +16,6 @@ FerrumGate Zero Trust Access solution installation scripts for
 
 <https://ferrumgate.com/docs/getting-started/install/>
 
-### Debuggin
+### Debugging
 
 docker ps -q | xargs -L 1 -P `docker ps | wc -l` docker logs --since 30s -f

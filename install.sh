@@ -180,7 +180,7 @@ is_gateway_yaml() {
 }
 
 create_cluster_ip() {
-    local random=$(shuf -i 1-254 -n1)
+    local random=$(shuf -i 20-254 -n1)
     echo "169.254.254.$random"
 }
 
@@ -265,6 +265,12 @@ main() {
             DEPLOY_ID=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 16 | head -n 1 | tr '[:upper:]' '[:lower:]')
         fi
 
+        HOST_ID=$(get_config HOST_ID)
+        if [ -z $HOST_ID ]; then
+            ## this must be lowercase , we are using with docker compose -p
+            HOST_ID=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 16 | head -n 1 | tr '[:upper:]' '[:lower:]')
+        fi
+
         GATEWAY_ID=$(get_config GATEWAY_ID)
         if [ -z $GATEWAY_ID ]; then
             ## this must be lowercase , we are using with docker compose -p
@@ -278,7 +284,7 @@ main() {
 
         REDIS_HA_HOST=$(get_config REDIS_HA_HOST)
         if [ -z "$REDIS_HA_HOST" ]; then
-            REDIS_HA_HOST="redis-ha:6379"
+            REDIS_HA_HOST="redis-ha:7379"
         fi
 
         REDIS_HOST_SSH=$(echo $REDIS_HOST | sed 's/:/#/g')
@@ -305,7 +311,7 @@ main() {
 
         REDIS_INTEL_HA_HOST=$(get_config REDIS_INTEL_HA_HOST)
         if [ -z "$REDIS_INTEL_HA_HOST" ]; then
-            REDIS_INTEL_HA_HOST="redis-intel-ha:6380"
+            REDIS_INTEL_HA_HOST="redis-intel-ha:7380"
         fi
 
         REDIS_INTEL_PASS=$(get_config REDIS_INTEL_PASS)
@@ -320,7 +326,7 @@ main() {
 
         ES_HA_HOST=$(get_config ES_HA_HOST)
         if [ -z "$ES_HA_HOST" ]; then
-            ES_HA_HOST="http://es-ha:9200"
+            ES_HA_HOST="http://es-ha:10200"
         fi
 
         ES_USER=$(get_config ES_USER)
@@ -403,6 +409,16 @@ main() {
             CLUSTER_NODE_PUBLIC_KEY=$(create_cluster_public_key $CLUSTER_NODE_PRIVATE_KEY)
         fi
 
+        CLUSTER_NODE_IPW=$(get_config CLUSTER_NODE_IPW)
+        if [ -z "$CLUSTER_NODE_IPW" ]; then
+            CLUSTER_NODE_IPW=$(create_cluster_ip)
+        fi
+
+        CLUSTER_NODE_PORTW=$(get_config CLUSTER_NODE_PORTW)
+        if [ -z $CLUSTER_NODE_PORTW ]; then
+            CLUSTER_NODE_PORTW=54320
+        fi
+
         CLUSTER_NODE_PEERS=$(get_config CLUSTER_NODE_PEERS)
         CLUSTER_REDIS_MASTER=$(get_config CLUSTER_REDIS_MASTER)
         CLUSTER_REDIS_QUORUM=$(get_config CLUSTER_REDIS_QUORUM)
@@ -450,8 +466,9 @@ main() {
 
         cat >$ENV_FILE_ETC <<EOF
 DEPLOY=docker
-ROLE=master:node
+ROLE=master:worker
 DEPLOY_ID=$DEPLOY_ID
+HOST_ID=$HOST_ID
 REDIS_HOST=$REDIS_HOST
 REDIS_HA_HOST=$REDIS_HA_HOST
 REDIS_HOST_SSH=$REDIS_HOST_SSH
@@ -490,6 +507,11 @@ CLUSTER_REDIS_INTEL_QUORUM=$CLUSTER_REDIS_INTEL_QUORUM
 CLUSTER_ES_PEERS=$CLUSTER_ES_PEERS
 CLUSTER_NODE_PUBLIC_IP=
 CLUSTER_NODE_PUBLIC_PORT=
+CLUSTER_NODE_IPW=$CLUSTER_NODE_IPW
+CLUSTER_NODE_PORTW=$CLUSTER_NODE_PORTW
+CLUSTER_NODE_PUBLIC_IPW=
+CLUSTER_NODE_PUBLIC_PORTW=
+CLUSTER_NODE_PEERSW=
 
 EOF
 
@@ -535,6 +557,7 @@ EOF
         if [ $allready_installed = N ]; then
 
             sed -i "s/??GATEWAY_ID/$GATEWAY_ID/g" $DOCKER_FILE
+            sed -i "s/??HOST_ID/$HOST_ID/g" $DOCKER_FILE
             sed -i 's/??SSH_PORT/9999/g' $DOCKER_FILE
 
             DOCKER_FILE_GATEWAY_ETC=$ETC_DIR/gateway.$GATEWAY_ID.yaml

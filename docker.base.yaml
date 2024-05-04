@@ -123,7 +123,7 @@ services:
         timeout client  30s
 
         frontend frontend_redis
-          bind :6379 name redis
+          bind :7379 name redis
           default_backend backend_redis
 
         backend backend_redis
@@ -149,13 +149,16 @@ services:
         done
 
         redis_master=${CLUSTER_REDIS_MASTER}
-        if [ ! -z "$$redis_master" ];then
+        if [ true ] || [ ! -z "$$redis_master" ];then
          echo "starting redis-ha"
          haproxy  -f haproxy.cfg
         else 
           echo "no redis cluster, closing ha"
         fi
     restart: always
+    ports: 
+      - ${CLUSTER_NODE_IP}:7379:7379
+      - ${CLUSTER_NODE_IPW}:7379:7379
     deploy:
       mode: global
       restart_policy:
@@ -237,6 +240,7 @@ services:
         sed -i "s#^sentinel monitor redis.*#sentinel monitor redis ${CLUSTER_REDIS_INTEL_MASTER} 6380 ${CLUSTER_REDIS_INTEL_QUORUM}#g" $$CONF_FILE
         sed -i "s#^sentinel auth-pass redis.*#sentinel auth-pass redis ${REDIS_INTEL_PASS}#g" $$CONF_FILE
         fi
+
         redis_master=${CLUSTER_REDIS_MASTER}
         if [ ! -z $${redis_master} ];then
           echo "starting sentinel"
@@ -279,7 +283,7 @@ services:
         timeout client  30s
 
         frontend frontend_redis
-          bind :6380 name redis
+          bind :7380 name redis
           default_backend backend_redis
 
         backend backend_redis
@@ -305,13 +309,16 @@ services:
         done
 
         redis_master=${CLUSTER_REDIS_INTEL_MASTER}
-        if [ ! -z "$$redis_master" ];then
+        if [ true ] || [ ! -z "$$redis_master" ];then
          echo "starting redis-intel-ha"
          haproxy  -f haproxy.cfg
         else 
           echo "no redis cluster, closing ha"
         fi
     restart: always
+    ports:
+      - ${CLUSTER_NODE_IP}:7380:7380
+      - ${CLUSTER_NODE_IPW}:7380:7380
     deploy:
       mode: global
       restart_policy:
@@ -350,6 +357,7 @@ services:
     restart: always
     ports:
       - ${CLUSTER_NODE_IP}:6381:6381
+      - ${CLUSTER_NODE_IPW}:6381:6381
     deploy:
       mode: replicated
       replicas: 1
@@ -412,39 +420,46 @@ services:
         timeout client  30s
 
         frontend frontend_es
-          bind :9200 name es
+          bind :10200 name es
           default_backend backend_es
 
         backend backend_es
         EOF
 
         peers="${CLUSTER_ES_PEERS}"
-        backup="";
-        for line in $$peers;do
-          host=$$(echo $$line|cut -d'/' -f1);
-          ip=$$(echo $$line|cut -d'/' -f2);
-          
-          if [ ! -z $$host ] && [ ! -z $$ip ];then
-            backup_str=""
-            if [ -z $$backup ];then
-                backup_str="";
-            else
-                backup_str="backup"
+        if [ -z $$peers ];then
+          backup="";
+          for line in $$peers;do
+            host=$$(echo $$line|cut -d'/' -f1);
+            ip=$$(echo $$line|cut -d'/' -f2);
+            
+            if [ ! -z $$host ] && [ ! -z $$ip ];then
+              backup_str=""
+              if [ -z $$backup ];then
+                  backup_str="";
+              else
+                  backup_str="backup"
+              fi
+              backup="backup";
+              echo " server $$host $$ip:9200 check inter 3s  fall 20  rise 20 $$backup_str" >> $$CONF_FILE
             fi
-            backup="backup";
-            echo " server $$host $$ip:9200 check inter 3s  fall 20  rise 20 $$backup_str" >> $$CONF_FILE
-          fi
 
-        done
+          done
+        else
+        echo " server ${CLUSTER_NODE_HOST} ${CLUSTER_NODE_IP}:9200 check inter 3s  fall 20  rise 20 " >> $$CONF_FILE
+        fi
 
         es_peers="${CLUSTER_ES_PEERS}"
-        if [ ! -z "$$es_peers" ];then
+        if [ true ] ||  [ ! -z "$$es_peers" ];then
          echo "starting es-ha"
          haproxy  -f haproxy.cfg
         else 
           echo "no es cluster, closing ha"
         fi
     restart: always
+    ports:
+      - ${CLUSTER_NODE_IP}:10200:10200
+      - ${CLUSTER_NODE_IPW}:10200:10200
     deploy:
       mode: global
       restart_policy:
@@ -530,6 +545,7 @@ services:
       - MODULE_ACTIVITY_SVC_PARSER=false
     ports:
       - ${CLUSTER_NODE_IP}:9292:9292
+      - ${CLUSTER_NODE_IPW}:9292:9292
     deploy:
       mode: replicated
       replicas: ${LOG_REPLICAS}

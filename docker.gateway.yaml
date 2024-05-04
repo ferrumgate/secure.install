@@ -2,6 +2,8 @@ version: "3.9"
 
 networks:
   ferrum:
+  fg-base_ferrum:
+    external: true
 
 volumes:
   ferrum:
@@ -26,7 +28,7 @@ services:
     volumes:
       - ferrum:/data
 
-  server-ssh:
+  server-quic:
     image: "??PRIVATE_REGISTRY/ferrumgate/secure.server.quic:1.1.0"
     labels:
       FerrumGatewayId: "??GATEWAY_ID"
@@ -55,6 +57,7 @@ services:
       - ferrum:/etc/ferrumgate
     networks:
       - ferrum
+      - fg-base_ferrum
     logging:
       driver: local
 
@@ -74,6 +77,7 @@ services:
       - FERRUM_IO_IMAGE=??PRIVATE_REGISTRY/ferrumgate/ferrum.io:1.5.0
       - ENCRYPT_KEY=${ENCRYPT_KEY}
       - GATEWAY_ID=??GATEWAY_ID
+      - HOST_ID=??HOST_ID
       - ES_HOST=${ES_PROXY_HOST}
       - ES_USER=${ES_USER}
       - ES_PASS=${ES_PASS}
@@ -82,10 +86,9 @@ services:
       - DB_FOLDER=/var/lib/ferrumgate/db
     depends_on:
       - prepare
-      - server-ssh
+      - server-quic
     deploy:
-      mode: replicated
-      replicas: 1
+      mode: global
       restart_policy:
         delay: 5s
     volumes:
@@ -93,6 +96,6 @@ services:
       - lmdb:/var/lib/ferrumgate
       - /etc/docker:/etc/docker
       - /var/run/docker.sock:/var/run/docker.sock
-    network_mode: service:server-ssh
+    network_mode: service:server-quic
     logging:
       driver: local
