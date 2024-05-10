@@ -27,6 +27,9 @@ services:
       - ferrum
     volumes:
       - ferrum:/data
+    profiles:
+      - worker
+
 
   server-quic:
     image: "??PRIVATE_REGISTRY/ferrumgate/secure.server.quic:1.1.0"
@@ -60,6 +63,8 @@ services:
       - fg-base_ferrum
     logging:
       driver: local
+    profiles:
+      - worker
 
   admin:
     image: "??PRIVATE_REGISTRY/ferrumgate/job.admin:1.14.0"
@@ -68,16 +73,18 @@ services:
     restart: always
     privileged: true
     environment:
+      - MODE=gateway
+      - ROLES=${ROLES}
       - REDIS_HOST=${REDIS_PROXY_HOST}
       - REDIS_PASS=${REDIS_PASS}
       - REDIS_LOCAL_HOST=${REDIS_LOCAL_HOST}
       - REDIS_LOCAL_PASS=${REDIS_LOCAL_PASS}
       - REDIS_INTEL_HOST=${REDIS_INTEL_PROXY_HOST}
       - REDIS_INTEL_PASS=${REDIS_INTEL_PASS}
-      - FERRUM_IO_IMAGE=??PRIVATE_REGISTRY/ferrumgate/ferrum.io:1.5.0
+      - FERRUM_IO_IMAGE=??PRIVATE_REGISTRY/ferrumgate/ferrum.io:1.6.0
       - ENCRYPT_KEY=${ENCRYPT_KEY}
       - GATEWAY_ID=??GATEWAY_ID
-      - HOST_ID=??HOST_ID
+      - NODE_ID=${NODE_ID}
       - ES_HOST=${ES_PROXY_HOST}
       - ES_USER=${ES_USER}
       - ES_PASS=${ES_PASS}
@@ -99,3 +106,5 @@ services:
     network_mode: service:server-quic
     logging:
       driver: local
+    profiles:
+      - worker

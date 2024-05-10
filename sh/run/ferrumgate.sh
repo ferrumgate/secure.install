@@ -257,10 +257,43 @@ recreate_gateway() {
     create_gateway $port $gateway_id
 }
 
+is_master_host() {
+    local role=$(get_config ROLES)
+    local count=$(echo $role | grep "master" | wc -l)
+    if [ ! $count -eq "0" ]; then
+        echo "yes"
+    else
+        echo "no"
+    fi
+}
+
+is_worker_host() {
+    local role=$(get_config ROLES)
+    local count=$(echo $role | grep "worker" | wc -l)
+    if [ ! $count -eq "0" ]; then
+        echo "yes"
+    else
+        echo "no"
+    fi
+}
+
+get_docker_profile() {
+    local profile=""
+    if [ $(is_master_host) = "yes" ]; then
+        profile="$profile --profile master"
+    fi
+
+    if [ $(is_worker_host) = "yes" ]; then
+        profile="$profile --profile worker"
+    fi
+    echo $profile
+}
+
 start_base() {
     info "starting base"
+
     docker compose -f $ETC_DIR/base.yaml --env-file $ETC_DIR/env \
-        -p fg-base up -d --remove-orphans
+        $(get_docker_profile) -p fg-base up -d --remove-orphans
 }
 stop_base() {
     info "stoping base"
@@ -280,7 +313,7 @@ start_gateway() {
     # just worker node
     if [ $(is_worker_host) = "yes" ] && [ $(is_master_host) = "no" ]; then
         info "this is a worker node"
-        sed -i "s|external:.*|external: false|g" $FILE
+        #sed -i "s|external:.*|external: false|g" $FILE
         yq -yi ".services.\"server-quic\".extra_hosts[0] |= \"registry.ferrumgate.zero:192.168.88.40\"" $FILE
         local peers=$(get_config CLUSTER_NODE_PEERSW)
         if [ ! -z $peers ]; then
@@ -293,31 +326,11 @@ start_gateway() {
         fi
 
     else
-        sed -i "s|external:.*|external: true|g" $FILE
+        #sed -i "s|external:.*|external: true|g" $FILE
         yq -yi ".services.\"server-quic\".extra_hosts[0] |= \"registry.ferrumgate.zero:192.168.88.40\"" $FILE
     fi
     docker compose -f $FILE --env-file $ETC_DIR/env \
-        -p fg-$gatewayId up -d --remove-orphans
-}
-
-is_master_host() {
-    local role=$(get_config ROLE)
-    local count=$(echo $role | grep "master" | wc -l)
-    if [ ! $count -eq "0" ]; then
-        echo "yes"
-    else
-        echo "no"
-    fi
-}
-
-is_worker_host() {
-    local role=$(get_config ROLE)
-    local count=$(echo $role | grep "worker" | wc -l)
-    if [ ! $count -eq "0" ]; then
-        echo "yes"
-    else
-        echo "no"
-    fi
+        $(get_docker_profile) -p fg-$gatewayId up -d --remove-orphans
 }
 
 prepare_env() {
@@ -376,19 +389,15 @@ start_base_and_gateways() {
         start_cluster
     fi
 
-    if [ $(is_master_host) = "yes" ]; then
-        start_base
-    fi
+    start_base
 
-    if [ $(is_worker_host) = "yes" ]; then
-        for file in $(ls $ETC_DIR); do
-            local result=$(is_gateway_yaml $file)
-            if [ ! -z $result ]; then
-                local gatewayId=$(echo "$file" | sed -e "s/gateway.//" -e "s/.yaml//")
-                start_gateway $gatewayId
-            fi
-        done
-    fi
+    for file in $(ls $ETC_DIR); do
+        local result=$(is_gateway_yaml $file)
+        if [ ! -z $result ]; then
+            local gatewayId=$(echo "$file" | sed -e "s/gateway.//" -e "s/.yaml//")
+            start_gateway $gatewayId
+        fi
+    done
 
 }
 stop_gateway() {
@@ -847,14 +856,14 @@ upgrade_to_master() {
     info "changing host role to master"
     read -p "are you sure [Yn] " yesno
     if [ $yesno = "Y" ]; then
-        set_config ROLE "master"
+        set_config ROLES "master"
     fi
 }
 upgrade_to_worker() {
     info "changing host role to worker"
     read -p "are you sure [Yn] " yesno
     if [ $yesno = "Y" ]; then
-        set_config ROLE "worker"
+        set_config ROLES "worker"
     fi
 }
 

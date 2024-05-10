@@ -259,16 +259,21 @@ main() {
             LOG_LEVEL=info
         fi
 
+        ROLES=$(get_config ROLES)
+        if [ -z $ROLES ]; then
+            ROLES="master:worker"
+        fi
+
         DEPLOY_ID=$(get_config DEPLOY_ID)
         if [ -z $DEPLOY_ID ]; then
             ## this must be lowercase , we are using with docker compose -p
             DEPLOY_ID=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 16 | head -n 1 | tr '[:upper:]' '[:lower:]')
         fi
 
-        HOST_ID=$(get_config HOST_ID)
-        if [ -z $HOST_ID ]; then
+        NODE_ID=$(get_config NODE_ID)
+        if [ -z $NODE_ID ]; then
             ## this must be lowercase , we are using with docker compose -p
-            HOST_ID=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 16 | head -n 1 | tr '[:upper:]' '[:lower:]')
+            NODE_ID=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 16 | head -n 1 | tr '[:upper:]' '[:lower:]')
         fi
 
         GATEWAY_ID=$(get_config GATEWAY_ID)
@@ -437,6 +442,46 @@ main() {
             CLUSTER_ES_PEERS=""
         fi
 
+        CLUSTER_NODE_PUBLIC_IP=$(get_config CLUSTER_NODE_PUBLIC_IP)
+        if [ -z "$CLUSTER_NODE_PUBLIC_IP" ]; then
+            CLUSTER_NODE_PUBLIC_IP=""
+        fi
+
+        CLUSTER_NODE_PUBLIC_PORT=$(get_config CLUSTER_NODE_PUBLIC_PORT)
+        if [ -z "$CLUSTER_NODE_PUBLIC_PORT" ]; then
+            CLUSTER_NODE_PUBLIC_PORT=""
+        fi
+
+        CLUSTER_NODE_PUBLIC_IPW=$(get_config CLUSTER_NODE_PUBLIC_IPW)
+        if [ -z "$CLUSTER_NODE_PUBLIC_IPW" ]; then
+            CLUSTER_NODE_PUBLIC_IPW=""
+        fi
+
+        CLUSTER_NODE_PUBLIC_PORTW=$(get_config CLUSTER_NODE_PUBLIC_PORTW)
+        if [ -z "$CLUSTER_NODE_PUBLIC_PORTW" ]; then
+            CLUSTER_NODE_PUBLIC_PORTW=""
+        fi
+
+        CLUSTER_NODE_PEERSW=$(get_config CLUSTER_NODE_PEERSW)
+        if [ -z "$CLUSTER_NODE_PEERSW" ]; then
+            CLUSTER_NODE_PEERSW=""
+        fi
+
+        FERRUM_CLOUD_ID=$(get_config FERRUM_CLOUD_ID)
+        if [ -z "$FERRUM_CLOUD_ID" ]; then
+            FERRUM_CLOUD_ID=""
+        fi
+
+        FERRUM_CLOUD_URL=$(get_config FERRUM_CLOUD_URL)
+        if [ -z "$FERRUM_CLOUD_URL" ]; then
+            FERRUM_CLOUD_URL=""
+        fi
+
+        FERRUM_CLOUD_TOKEN=$(get_config FERRUM_CLOUD_TOKEN)
+        if [ -z "$FERRUM_CLOUD_TOKEN" ]; then
+            FERRUM_CLOUD_TOKEN=""
+        fi
+
         #SSL_FILE=$(create_certificates)
         #SSL_PUB=$(cat ${SSL_FILE}.crt | base64 -w 0)
         #SSL_KEY=$(cat ${SSL_FILE}.key | base64 -w 0)
@@ -466,9 +511,10 @@ main() {
 
         cat >$ENV_FILE_ETC <<EOF
 DEPLOY=docker
-ROLE=master:worker
+ROLES=$ROLES
 DEPLOY_ID=$DEPLOY_ID
-HOST_ID=$HOST_ID
+NODE_ID=$NODE_ID
+VERSION=$VERSION
 REDIS_HOST=$REDIS_HOST
 REDIS_HA_HOST=$REDIS_HA_HOST
 REDIS_HOST_SSH=$REDIS_HOST_SSH
@@ -505,13 +551,16 @@ CLUSTER_REDIS_QUORUM=$CLUSTER_REDIS_QUORUM
 CLUSTER_REDIS_INTEL_MASTER=$CLUSTER_REDIS_INTEL_MASTER
 CLUSTER_REDIS_INTEL_QUORUM=$CLUSTER_REDIS_INTEL_QUORUM
 CLUSTER_ES_PEERS=$CLUSTER_ES_PEERS
-CLUSTER_NODE_PUBLIC_IP=
-CLUSTER_NODE_PUBLIC_PORT=
+CLUSTER_NODE_PUBLIC_IP=$CLUSTER_NODE_PUBLIC_IP
+CLUSTER_NODE_PUBLIC_PORT=$CLUSTER_NODE_PUBLIC_PORT
 CLUSTER_NODE_IPW=$CLUSTER_NODE_IPW
 CLUSTER_NODE_PORTW=$CLUSTER_NODE_PORTW
-CLUSTER_NODE_PUBLIC_IPW=
-CLUSTER_NODE_PUBLIC_PORTW=
-CLUSTER_NODE_PEERSW=
+CLUSTER_NODE_PUBLIC_IPW=$CLUSTER_NODE_PUBLIC_IPW
+CLUSTER_NODE_PUBLIC_PORTW=$CLUSTER_NODE_PUBLIC_PORTW
+CLUSTER_NODE_PEERSW=$CLUSTER_NODE_PEERSW
+FERRUM_CLOUD_ID=$FERRUM_CLOUD_ID
+FERRUM_CLOUD_URL=$FERRUM_CLOUD_URL
+FERRUM_CLOUD_TOKEN=$FERRUM_CLOUD_TOKEN
 
 EOF
 
@@ -557,7 +606,6 @@ EOF
         if [ $allready_installed = N ]; then
 
             sed -i "s/??GATEWAY_ID/$GATEWAY_ID/g" $DOCKER_FILE
-            sed -i "s/??HOST_ID/$HOST_ID/g" $DOCKER_FILE
             sed -i 's/??SSH_PORT/9999/g' $DOCKER_FILE
 
             DOCKER_FILE_GATEWAY_ETC=$ETC_DIR/gateway.$GATEWAY_ID.yaml
