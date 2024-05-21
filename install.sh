@@ -94,7 +94,7 @@ download() {
     # Abort if download command failed
     [ $? -eq 0 ] || fatal 'Download failed'
 }
-VERSION=1.17.0
+VERSION=2.0.0
 download_and_verify() {
     if [ -d "./secure.install" ]; then
         rm -rf secure.install
@@ -425,6 +425,9 @@ main() {
         fi
 
         CLUSTER_NODE_PEERS=$(get_config CLUSTER_NODE_PEERS)
+        if [ -z "$CLUSTER_NODE_PEERS" ]; then
+            CLUSTER_NODE_PEERS=""
+        fi
         CLUSTER_REDIS_MASTER=$(get_config CLUSTER_REDIS_MASTER)
         CLUSTER_REDIS_QUORUM=$(get_config CLUSTER_REDIS_QUORUM)
         if [ -z $CLUSTER_REDIS_QUORUM ]; then
@@ -480,6 +483,16 @@ main() {
         FERRUM_CLOUD_TOKEN=$(get_config FERRUM_CLOUD_TOKEN)
         if [ -z "$FERRUM_CLOUD_TOKEN" ]; then
             FERRUM_CLOUD_TOKEN=""
+        fi
+
+        FERRUM_CLOUD_IP=$(get_config FERRUM_CLOUD_IP)
+        if [ -z "$FERRUM_CLOUD_IP" ]; then
+            FERRUM_CLOUD_IP=""
+        fi
+
+        FERRUM_CLOUD_PORT=$(get_config FERRUM_CLOUD_PORT)
+        if [ -z "$FERRUM_CLOUD_PORT" ]; then
+            FERRUM_CLOUD_PORT=""
         fi
 
         #SSL_FILE=$(create_certificates)
@@ -561,6 +574,8 @@ CLUSTER_NODE_PEERSW=$CLUSTER_NODE_PEERSW
 FERRUM_CLOUD_ID=$FERRUM_CLOUD_ID
 FERRUM_CLOUD_URL=$FERRUM_CLOUD_URL
 FERRUM_CLOUD_TOKEN=$FERRUM_CLOUD_TOKEN
+FERRUM_CLOUD_IP=$FERRUM_CLOUD_IP
+FERRUM_CLOUD_PORT=$FERRUM_CLOUD_PORT
 
 EOF
 

@@ -86,7 +86,9 @@ print_usage() {
     echo "  ferrumgate [ --upgrade-to-master ] make this host master"
     echo "  ferrumgate [ --upgrade-to-worker ] make this host worker"
     echo "  ferrumgate [ --show-config-all ] show all config"
-    echo "  ferrumgate [ --set-config-all ] configAsBase64 sets all config"
+    echo "  ferrumgate [ --cluster-add-worker ] add a worker to cluster"
+    echo "  ferrumgate [ --cluster-join ] join to a cluster"
+    echo "  ferrumgate [ --regenerate-cluster-keys ] regenerate cluster keys"
 
 }
 
@@ -340,14 +342,14 @@ prepare_env() {
     local is_redis_clustered=$(get_config CLUSTER_REDIS_MASTER)
     if [ -z "$is_redis_clustered" ]; then
         info "redis is not clustered"
-        set_config REDIS_PROXY_HOST $redis_host
+        set_config REDIS_PROXY_HOST "$redis_host"
         local redis_host_ssh=$(echo $redis_host | sed 's/:/#/g')
-        set_config REDIS_HOST_SSH $redis_host_ssh
+        set_config REDIS_HOST_SSH "$redis_host_ssh"
     else
         info "redis is clustered"
-        set_config REDIS_PROXY_HOST $redis_ha_host
+        set_config REDIS_PROXY_HOST "$redis_ha_host"
         local redis_host_ssh=$(echo $redis_ha_host | sed 's/:/#/g')
-        set_config REDIS_HOST_SSH $redis_host_ssh
+        set_config REDIS_HOST_SSH "$redis_host_ssh"
 
     fi
 
@@ -357,27 +359,27 @@ prepare_env() {
     local is_redis_intel_clustered=$(get_config CLUSTER_REDIS_INTEL_MASTER)
     if [ -z "$is_redis_intel_clustered" ]; then
         info "redis intel is not clustered"
-        set_config REDIS_INTEL_PROXY_HOST $redis_intel_host
+        set_config REDIS_INTEL_PROXY_HOST "$redis_intel_host"
     else
         info "redis intel is clustered"
-        set_config REDIS_INTEL_PROXY_HOST $redis_intel_ha_host
+        set_config REDIS_INTEL_PROXY_HOST "$redis_intel_ha_host"
     fi
 
     local es_host=$(get_config ES_HOST)
     local es_ha_host=$(get_config ES_HA_HOST)
     local is_es_clustered=$(get_config CLUSTER_ES_PEERS)
     if [ -z "$is_es_clustered" ]; then
-        set_config ES_PROXY_HOST $es_host
+        set_config ES_PROXY_HOST "$es_host"
     else
-        set_config ES_PROXY_HOST $es_ha_host
+        set_config ES_PROXY_HOST "$es_ha_host"
     fi
 
     if [ $(is_master_host) = "no" ] && [ $(is_worker_host) = "yes" ]; then
         #if this is a worker host
-        set_config ES_PROXY_HOST $es_ha_host
-        set_config REDIS_PROXY_HOST $redis_ha_host
+        set_config ES_PROXY_HOST "$es_ha_host"
+        set_config REDIS_PROXY_HOST "$redis_ha_host"
         local redis_host_ssh=$(echo $redis_ha_host | sed 's/:/#/g')
-        set_config REDIS_HOST_SSH $redis_host_ssh
+        set_config REDIS_HOST_SSH "$redis_host_ssh"
 
     fi
 }
@@ -479,16 +481,16 @@ change_config() {
 
     if [ $key = "ES_HOST" ]; then
 
-        set_config ES_HOST $value
-        set_config ES_INTEL_HOST $value
+        set_config ES_HOST "$value"
+        set_config ES_INTEL_HOST "$value"
     fi
     if [ $key = "ES_PASS" ]; then
 
-        set_config ES_PASS $value
-        set_config ES_INTEL_PASS $value
+        set_config ES_PASS "$value"
+        set_config ES_INTEL_PASS "$value"
     fi
 
-    set_config $key $value
+    set_config "$key" "$value"
 
 }
 all_logs() {
@@ -533,7 +535,7 @@ stop_cluster() {
     wg-quick down wgferrumw 2>/dev/null || true
     ip link del dev wgferrumw 2>/dev/null || true
 
-    info "stoped cluster"
+    info "stopped cluster"
 }
 
 start_cluster() {
@@ -571,7 +573,6 @@ start_cluster() {
         echo "Endpoint=$(echo $line | cut -d'/' -f2)" >>$FILE
         echo "AllowedIPs=$(echo $line | cut -d'/' -f3)" >>$FILE
         echo "PublicKey=$(echo $line | cut -d'/' -f4 | xxd -r -p | base64)" >>$FILE
-        echo ""
     done
 
     # start worker interfaces
@@ -614,8 +615,8 @@ create_cluster_public_key() {
 recreate_cluster_keys() {
     local pri=$(create_cluster_private_key)
     local pub=$(create_cluster_public_key $pri)
-    set_config CLUSTER_NODE_PRIVATE_KEY $pri
-    set_config CLUSTER_NODE_PUBLIC_KEY $pub
+    set_config CLUSTER_NODE_PRIVATE_KEY "$pri"
+    set_config CLUSTER_NODE_PUBLIC_KEY "$pub"
     info "recreated keys"
 }
 
@@ -701,6 +702,34 @@ show_cluster_config() {
 
 }
 
+get_cluster_config_public_peer() {
+    local node_host=$(get_config CLUSTER_NODE_HOST)
+    local node_ip=$(get_config CLUSTER_NODE_IP)
+    local node_port=$(get_config CLUSTER_NODE_PORT)
+    local node_ipw=$(get_config CLUSTER_NODE_IPW)
+    local node_portw=$(get_config CLUSTER_NODE_PORTW)
+    local cluster_public_ip=$(curl --silent ifconfig.me/ip)
+    set_config CLUSTER_NODE_PUBLIC_IP "$cluster_public_ip"
+    set_config CLUSTER_NODE_PUBLIC_IPW "$cluster_public_ip"
+    local cluster_public_port=$(get_config CLUSTER_NODE_PUBLIC_PORT)
+    if [ -z "$cluster_public_port" ]; then
+        cluster_public_port=54310
+        set_config CLUSTER_NODE_PUBLIC_PORT 54310
+    fi
+    local cluster_public_portw=$(get_config CLUSTER_NODE_PUBLIC_PORTW)
+    if [ -z "$cluster_public_portw" ]; then
+        cluster_public_portw=54309
+        set_config CLUSTER_NODE_PUBLIC_PORTW 54309
+    fi
+    local node_public_key=$(get_config CLUSTER_NODE_PUBLIC_KEY)
+    if [ $(is_master_host) = "yes" ]; then
+        echo "PEER=$node_host/$cluster_public_ip:$cluster_public_port/$node_ip/$node_public_key"
+        echo "PEERW=$node_host/$cluster_public_ip:$cluster_public_portw/$node_ipw/$node_public_key"
+    else
+        echo "PEERW=$node_host/$cluster_public_ip:$cluster_public_portw/$node_ipw/$node_public_key"
+    fi
+}
+
 add_cluster_peer() {
     if [ $# -lt 1 ]; then
         error "no arguments supplied"
@@ -765,7 +794,7 @@ set_cluster_config() {
         read -p "enter hostname: " hostname
         read -p "are you sure [Yn] " yesno
         if [ $yesno = "Y" ]; then
-            set_config CLUSTER_NODE_HOST $hostname
+            set_config CLUSTER_NODE_HOST "$hostname"
             info "cluster host changed"
         fi
     fi
@@ -773,7 +802,7 @@ set_cluster_config() {
         read -p "enter ip: " ip
         read -p "are you sure [Yn] " yesno
         if [ $yesno = "Y" ]; then
-            set_config CLUSTER_NODE_IP $ip
+            set_config CLUSTER_NODE_IP "$ip"
             info "cluster ip changed"
         fi
     fi
@@ -782,7 +811,7 @@ set_cluster_config() {
         read -p "enter port: " port
         read -p "are you sure [Yn] " yesno
         if [ $yesno = "Y" ]; then
-            set_config CLUSTER_NODE_PORT $port
+            set_config CLUSTER_NODE_PORT "$port"
             info "cluster port changed"
         fi
     fi
@@ -854,17 +883,11 @@ remove_es_peer() {
 
 upgrade_to_master() {
     info "changing host role to master"
-    read -p "are you sure [Yn] " yesno
-    if [ $yesno = "Y" ]; then
-        set_config ROLES "master"
-    fi
+    set_config ROLES "master"
 }
 upgrade_to_worker() {
     info "changing host role to worker"
-    read -p "are you sure [Yn] " yesno
-    if [ $yesno = "Y" ]; then
-        set_config ROLES "worker"
-    fi
+    set_config ROLES "worker"
 }
 
 show_config_all() {
@@ -873,7 +896,11 @@ show_config_all() {
 
     echo "ferrumgate --set-config-all \"$(cat /etc/ferrumgate/env | base64 -w 0)\""
 }
-
+##
+## if you change this funnction
+## remember also change nodes.component.ts in
+## ui.portal project
+##
 set_config_all() {
     if [ $# -lt 1 ]; then
         error "no arguments supplied"
@@ -883,27 +910,42 @@ set_config_all() {
     local input=$(echo "$1" | base64 -d)
 
     local redis_pass=$(get_config_from REDIS_PASS "$input")
-    set_config REDIS_PASS $redis_pass
-
-    local redis_local_pass=$(get_config_from REDIS_LOCAL_PASS "$input")
-    set_config REDIS_LOCAL_PASS $redis_local_pass
+    set_config REDIS_PASS "$redis_pass"
 
     local redis_intel_pass=$(get_config_from REDIS_INTEL_PASS "$input")
-    set_config REDIS_INTEL_PASS $redis_intel_pass
+    set_config REDIS_INTEL_PASS "$redis_intel_pass"
 
     local encrypt_key=$(get_config_from ENCRYPT_KEY "$input")
-    set_config ENCRYPT_KEY $encrypt_key
+    set_config ENCRYPT_KEY "$encrypt_key"
 
     local es_pass=$(get_config_from ES_PASS "$input")
-    set_config ES_PASS $es_pass
+    set_config ES_PASS "$es_pass"
 
     local es_intel_pass=$(get_config_from ES_INTEL_PASS "$input")
-    set_config ES_INTEL_PASS $es_intel_pass
+    set_config ES_INTEL_PASS "$es_intel_pass"
+
+    local ferrum_cloud_id=$(get_config_from FERRUM_CLOUD_ID "$input")
+    set_config FERRUM_CLOUD_ID "$ferrum_cloud_id"
+
+    local ferrum_cloud_url=$(get_config_from FERRUM_CLOUD_URL "$input")
+    set_config FERRUM_CLOUD_URL "$ferrum_cloud_url"
+
+    local ferrum_cloud_token=$(get_config_from FERRUM_CLOUD_TOKEN "$input")
+    set_config FERRUM_CLOUD_TOKEN "$ferrum_cloud_token"
+
     if [ $(is_master_host) = "yes" ]; then
+
         local node_ipw=$(get_config_from CLUSTER_NODE_IPW "$input")
-        set_config CLUSTER_NODE_IPW $node_ipw
+        set_config CLUSTER_NODE_IPW "$node_ipw"
+
         local node_portw=$(get_config_from CLUSTER_NODE_PORTW "$input")
-        set_config CLUSTER_NODE_PORTW $node_portw
+        set_config CLUSTER_NODE_PORTW "$node_portw"
+
+        local node_privatekey=$(get_config_from CLUSTER_NODE_PRIVATE_KEY "$input")
+        set_config CLUSTER_NODE_PRIVATE_KEY "$node_privatekey"
+
+        local node_publickey=$(get_config_from CLUSTER_NODE_PUBLIC_KEY "$input")
+        set_config CLUSTER_NODE_PUBLIC_KEY "$node_publickey"
     fi
 
 }
@@ -933,8 +975,8 @@ create_redis_cluster() {
         fi
     done
 
-    set_config CLUSTER_REDIS_MASTER $master_ip
-    set_config CLUSTER_REDIS_INTEL_MASTER $master_ip
+    set_config CLUSTER_REDIS_MASTER "$master_ip"
+    set_config CLUSTER_REDIS_INTEL_MASTER "$master_ip"
 
     if [ $node_host != $master_host ]; then # this is not master machine
         info "creating redis cluster"
@@ -975,7 +1017,7 @@ create_cluster() {
 cluster_add_worker() {
     if [ $(is_master_host) = "no" ]; then
         error "only master can add worker"
-        info "ferrumgate --update-to-master"
+        info "ferrumgate --upgrade-to-master"
         return
     fi
 
@@ -997,10 +1039,11 @@ cluster_add_worker() {
                 fi
             fi
         done
-        set_config CLUSTER_NODE_PEERSW $saved_peers
+        set_config CLUSTER_NODE_PEERSW "$saved_peers"
         start_cluster
     fi
 }
+
 cluster_join() {
 
     if [ $(is_worker_host) = "yes" ] && [ $(is_master_host) = "no" ]; then
@@ -1010,22 +1053,57 @@ cluster_join() {
         info "ferrumgate --upgrade-to-worker"
         return
     fi
-
-    read -p "do you want to continue [Yn] " yesno
-    if [ $yesno = "Y" ]; then
+    local peers=""
+    if [ $# -lt 1 ]; then
+        read -p "do you want to continue [Yn] " yesno
+        if [ $yesno != "Y" ]; then
+            return
+        fi
         echo "paste peer and ctrl-d when done:"
-        local peers=$(cat)
-        set_config CLUSTER_NODE_PEERSW ""
-        for line in $(echo "$peers" | tr " " "\n"); do
-            local peer=$(echo $line | cut -d'=' -f1)
-            if [ $peer = "PEERW" ]; then
-                local tmp=$(echo $line | cut -d'=' -f2-)
-                set_config CLUSTER_NODE_PEERSW $tmp
-                break
-            fi
-        done
-        start_cluster
+        peers=$(cat)
+    else
+        peers=$1
     fi
+
+    set_config CLUSTER_NODE_PEERSW ""
+    for line in $(echo "$peers" | tr " " "\n"); do
+        local peer=$(echo $line | cut -d'=' -f1)
+        if [ $peer = "PEERW" ]; then
+            local tmp=$(echo $line | cut -d'=' -f2-)
+            set_config CLUSTER_NODE_PEERSW "$tmp"
+            break
+        fi
+    done
+    start_cluster
+
+}
+
+create_cluster_private_key() {
+    wg genkey | base64 -d | xxd -p -c 256
+}
+create_cluster_public_key() {
+    echo $1 | xxd -r -p | base64 | wg pubkey | base64 -d | xxd -p -c 256
+}
+
+regenerate_cluster_keys() {
+    local pri=$(create_cluster_private_key)
+    local pub=$(create_cluster_public_key $pri)
+    set_config CLUSTER_NODE_PRIVATE_KEY "$pri"
+    set_config CLUSTER_NODE_PUBLIC_KEY "$pub"
+    info "regenerated keys"
+}
+
+create_cluster_ip() {
+    local random=$(shuf -i 20-254 -n1)
+    echo "169.254.254.$random"
+}
+
+regenerate_cluster_ips() {
+    local ip=$(create_cluster_ip)
+    set_config CLUSTER_NODE_IP "$ip"
+    local ipw=$(create_cluster_ip)
+    set_config CLUSTER_NODE_IPW "$ipw"
+    info "regenerated ips"
 }
 
 main() {
@@ -1065,7 +1143,9 @@ main() {
     set-config-all:,\
     create-cluster,\
     cluster-add-worker,\
-    cluster-join,\
+    cluster-join::,\
+    regenerate-cluster-keys,\
+    get-cluster-config-public-peer,\
     all-logs' -- "$@") || exit
     eval set -- "$ARGS"
     local service_name=''
@@ -1267,10 +1347,29 @@ main() {
         --cluster-join)
             opt=39
             shift
+            if [ ! -z $3 ]; then
+                parameter_name="$3"
+                shift
+            fi
             break
             ;;
         --restart-cluster)
             opt=40
+            shift
+            break
+            ;;
+        --regenerate-cluster-keys)
+            opt=41
+            shift
+            break
+            ;;
+        --regenerate-cluster-ips)
+            opt=42
+            shift
+            break
+            ;;
+        --get-cluster-config-public-peer)
+            opt=43
             shift
             break
             ;;
@@ -1323,10 +1422,13 @@ main() {
     [ $opt -eq 34 ] && upgrade_to_worker && exit 0
     [ $opt -eq 35 ] && show_config_all && exit 0
     [ $opt -eq 36 ] && set_config_all $parameter_name && exit 0
-    [ $opt -eq 37 ] && create_cluster $parameter_name && exit 0
-    [ $opt -eq 38 ] && cluster_add_worker $parameter_name && exit 0
+    [ $opt -eq 37 ] && create_cluster && exit 0
+    [ $opt -eq 38 ] && cluster_add_worker && exit 0
     [ $opt -eq 39 ] && cluster_join $parameter_name && exit 0
     [ $opt -eq 40 ] && start_cluster && exit 0
+    [ $opt -eq 41 ] && regenerate_cluster_keys && exit 0
+    [ $opt -eq 42 ] && regenerate_cluster_ips && exit 0
+    [ $opt -eq 43 ] && get_cluster_config_public_peer && exit 0
 
 }
 

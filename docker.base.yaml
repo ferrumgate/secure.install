@@ -175,6 +175,7 @@ services:
       driver: local
     profiles:
       - master
+      - worker
 
   redis-intel:
     image: redis:7-bullseye
@@ -500,9 +501,10 @@ services:
       driver: local
     profiles:
       - master
+      - worker
   
   ui:
-    image: "??PRIVATE_REGISTRY/ferrumgate/ui.portal:1.16.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/ui.portal:2.0.0"
     restart: always
     deploy:
       mode: global
@@ -516,7 +518,7 @@ services:
       - master
 
   rest:
-    image: "??PRIVATE_REGISTRY/ferrumgate/rest.portal:1.16.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/rest.portal:2.0.0"
     restart: always
     ports:
       - ${REST_HTTP_PORT}:8181
@@ -539,6 +541,12 @@ services:
       - ES_INTEL_PASS=${ES_INTEL_PASS}
       - LOG_LEVEL=${LOG_LEVEL}
       - NODE_ID=${NODE_ID}
+      - FERRUM_CLOUD_ID=${FERRUM_CLOUD_ID}
+      - FERRUM_CLOUD_URL=${FERRUM_CLOUD_URL}
+      - FERRUM_CLOUD_TOKEN=${FERRUM_CLOUD_TOKEN}
+      - FERRUM_CLOUD_IP=${FERRUM_CLOUD_IP}
+      - FERRUM_CLOUD_PORT=${FERRUM_CLOUD_PORT}
+      - CLUSTER_NODE_PUBLIC_KEY=${CLUSTER_NODE_PUBLIC_KEY}
       - STATIC_FOLDER=/usr/src/app/web
       - UI_HOST=ui:80
       - SHARE_PRIVATE_FOLDER=/usr/local/share/ferrumgate/private
@@ -561,7 +569,7 @@ services:
       - master
 
   log:
-    image: "??PRIVATE_REGISTRY/ferrumgate/job.log:1.13.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.log:2.0.0"
     restart: always
     environment:
       - REDIS_HOST=${REDIS_PROXY_HOST}
@@ -598,7 +606,7 @@ services:
       - master
 
   log-parser:
-    image: "??PRIVATE_REGISTRY/ferrumgate/job.log:1.13.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.log:2.0.0"
     restart: always
     environment:
       - REDIS_HOST=${REDIS_PROXY_HOST}
@@ -632,7 +640,7 @@ services:
       - master
 
   task:
-    image: "??PRIVATE_REGISTRY/ferrumgate/job.task:1.9.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.task:2.0.0"
     restart: always
     environment:
       - REDIS_HOST=${REDIS_PROXY_HOST}
@@ -666,7 +674,7 @@ services:
       - master
 
   node:
-    image: "??PRIVATE_REGISTRY/ferrumgate/job.admin:1.14.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.admin:2.0.0"
     restart: always
     privileged: true
     environment:
@@ -679,7 +687,16 @@ services:
       - REDIS_INTEL_HOST=${REDIS_INTEL_PROXY_HOST}
       - REDIS_INTEL_PASS=${REDIS_INTEL_PASS}
       - ENCRYPT_KEY=${ENCRYPT_KEY}
+      - ES_HOST=${ES_PROXY_HOST}
+      - ES_USER=${ES_USER}
+      - ES_PASS=${ES_PASS}
+      - ES_INTEL_HOST=${ES_PROXY_HOST}
+      - ES_INTEL_USER=${ES_INTEL_USER}
+      - ES_INTEL_PASS=${ES_INTEL_PASS}
       - NODE_ID=${NODE_ID}
+      - CLUSTER_NODE_HOST=${CLUSTER_NODE_HOST}
+      - CLUSTER_NODE_IPW=${CLUSTER_NODE_IPW}
+      - CLUSTER_NODE_PORTW=${CLUSTER_NODE_PORTW}
       - FERRUM_CLOUD_ID=${FERRUM_CLOUD_ID}
       - FERRUM_CLOUD_URL=${FERRUM_CLOUD_URL}
       - FERRUM_CLOUD_TOKEN=${FERRUM_CLOUD_TOKEN}
@@ -689,7 +706,8 @@ services:
         delay: 5s
     volumes:
       - /etc/ferrumgate/env:/etc/ferrumgate/env
-    network_mode: host
+    networks:
+      - ferrum
     logging:
       driver: local
     profiles:
