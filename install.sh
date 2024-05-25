@@ -60,7 +60,7 @@ setup_verify_arch() {
 #### verify existence of network downloader executable
 verify_downloader() {
     # Return failure if it doesn't exist or is no executable
-    [ -x "$(command -v $1)" ] || return 1
+    [ -x $(command -v "$1") ] || return 1
 
     # Set verified executable as our downloader program and return success
     DOWNLOADER=$1
@@ -69,22 +69,22 @@ verify_downloader() {
 #### verify existence of network downloader executable
 verify_command() {
     # Return failure if it doesn't exist or is no executable
-    [ -x "$(command -v $1)" ] || return 1
+    [ -x $(command -v "$1") ] || return 1
 
     return 0
 }
 
 #### download from github url ---
 download() {
-    echo $*
+    echo "$*"
     [ $# -eq 2 ] || fatal 'download needs exactly 2 arguments'
 
     case $DOWNLOADER in
     curl)
-        curl -o $1 -sfL $2
+        curl -o "$1" -sfL "$2"
         ;;
     wget)
-        wget -qNO $1 $2
+        wget -qNO "$1" "$2"
         ;;
     *)
         fatal "Incorrect executable '$DOWNLOADER'"
@@ -163,20 +163,20 @@ get_config() {
         error "no arguments supplied"
         exit 1
     fi
-    local key=$1
+    local key="$1"
 
-    file=$ETC_DIR/env
+    file="$ETC_DIR/env"
     if [ ! -f $file ]; then
         echo ""
         return
     fi
-    value=$(cat $file | grep $key= | cut -d"=" -f2-)
-    echo $value
+    value=$(cat "$file" | grep "$key=" | cut -d"=" -f2-)
+    echo "$value"
 }
 
 is_gateway_yaml() {
-    result=$(echo $1 | grep -E "gateway\.\w+\.yaml" || true)
-    echo $result
+    result=$(echo "$1" | grep -E "gateway\.\w+\.yaml" || true)
+    echo "$result"
 }
 
 create_cluster_ip() {
@@ -188,7 +188,7 @@ create_cluster_private_key() {
     wg genkey | base64 -d | xxd -p -c 256
 }
 create_cluster_public_key() {
-    echo $1 | xxd -r -p | base64 | wg pubkey | base64 -d | xxd -p -c 256
+    echo "$1" | xxd -r -p | base64 | wg pubkey | base64 -d | xxd -p -c 256
 }
 
 main() {
@@ -255,35 +255,35 @@ main() {
         chmod -R 600 $(pwd)
 
         LOG_LEVEL=$(get_config LOG_LEVEL)
-        if [ -z $LOG_LEVEL ]; then
+        if [ -z "$LOG_LEVEL" ]; then
             LOG_LEVEL=info
         fi
 
         ROLES=$(get_config ROLES)
-        if [ -z $ROLES ]; then
+        if [ -z "$ROLES" ]; then
             ROLES="master:worker"
         fi
 
         DEPLOY_ID=$(get_config DEPLOY_ID)
-        if [ -z $DEPLOY_ID ]; then
+        if [ -z "$DEPLOY_ID" ]; then
             ## this must be lowercase , we are using with docker compose -p
             DEPLOY_ID=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 16 | head -n 1 | tr '[:upper:]' '[:lower:]')
         fi
 
         NODE_ID=$(get_config NODE_ID)
-        if [ -z $NODE_ID ]; then
+        if [ -z "$NODE_ID" ]; then
             ## this must be lowercase , we are using with docker compose -p
             NODE_ID=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 16 | head -n 1 | tr '[:upper:]' '[:lower:]')
         fi
 
         GATEWAY_ID=$(get_config GATEWAY_ID)
-        if [ -z $GATEWAY_ID ]; then
+        if [ -z "$GATEWAY_ID" ]; then
             ## this must be lowercase , we are using with docker compose -p
             GATEWAY_ID=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 16 | head -n 1 | tr '[:upper:]' '[:lower:]')
         fi
 
         REDIS_HOST=$(get_config REDIS_HOST)
-        if [ -z $REDIS_HOST ]; then
+        if [ -z "$REDIS_HOST" ]; then
             REDIS_HOST="redis:6379"
         fi
 
@@ -366,7 +366,7 @@ main() {
         fi
 
         MODE=$(get_config MODE)
-        if [ -z $MODE ]; then
+        if [ -z "$MODE" ]; then
             MODE=single
         fi
 
@@ -381,12 +381,12 @@ main() {
         fi
 
         LOG_REPLICAS=$(get_config LOG_REPLICAS)
-        if [ -z $LOG_REPLICAS ]; then
+        if [ -z "$LOG_REPLICAS" ]; then
             LOG_REPLICAS=1
         fi
 
         LOG_PARSER_REPLICAS=$(get_config LOG_PARSER_REPLICAS)
-        if [ -z $LOG_PARSER_REPLICAS ]; then
+        if [ -z "$LOG_PARSER_REPLICAS" ]; then
             LOG_PARSER_REPLICAS=1
         fi
 
@@ -401,7 +401,7 @@ main() {
         fi
 
         CLUSTER_NODE_PORT=$(get_config CLUSTER_NODE_PORT)
-        if [ -z $CLUSTER_NODE_PORT ]; then
+        if [ -z "$CLUSTER_NODE_PORT" ]; then
             CLUSTER_NODE_PORT=54321
         fi
 
@@ -411,7 +411,7 @@ main() {
         fi
         CLUSTER_NODE_PUBLIC_KEY=$(get_config CLUSTER_NODE_PUBLIC_KEY)
         if [ -z "$CLUSTER_NODE_PUBLIC_KEY" ]; then
-            CLUSTER_NODE_PUBLIC_KEY=$(create_cluster_public_key $CLUSTER_NODE_PRIVATE_KEY)
+            CLUSTER_NODE_PUBLIC_KEY=$(create_cluster_public_key "$CLUSTER_NODE_PRIVATE_KEY")
         fi
 
         CLUSTER_NODE_IPW=$(get_config CLUSTER_NODE_IPW)
@@ -420,7 +420,7 @@ main() {
         fi
 
         CLUSTER_NODE_PORTW=$(get_config CLUSTER_NODE_PORTW)
-        if [ -z $CLUSTER_NODE_PORTW ]; then
+        if [ -z "$CLUSTER_NODE_PORTW" ]; then
             CLUSTER_NODE_PORTW=54320
         fi
 
@@ -430,13 +430,13 @@ main() {
         fi
         CLUSTER_REDIS_MASTER=$(get_config CLUSTER_REDIS_MASTER)
         CLUSTER_REDIS_QUORUM=$(get_config CLUSTER_REDIS_QUORUM)
-        if [ -z $CLUSTER_REDIS_QUORUM ]; then
+        if [ -z "$CLUSTER_REDIS_QUORUM" ]; then
             CLUSTER_REDIS_QUORUM=2
         fi
 
         CLUSTER_REDIS_INTEL_MASTER=$(get_config CLUSTER_REDIS_INTEL_MASTER)
         CLUSTER_REDIS_INTEL_QUORUM=$(get_config CLUSTER_REDIS_INTEL_QUORUM)
-        if [ -z $CLUSTER_REDIS_INTEL_QUORUM ]; then
+        if [ -z "$CLUSTER_REDIS_INTEL_QUORUM" ]; then
             CLUSTER_REDIS_INTEL_QUORUM=2
         fi
 
@@ -500,24 +500,24 @@ main() {
         #SSL_KEY=$(cat ${SSL_FILE}.key | base64 -w 0)
         #rm ${SSL_FILE}.crt && rm ${SSL_FILE}.key
 
-        ENV_FILE_ETC=$ETC_DIR/env
+        ENV_FILE_ETC="$ETC_DIR/env"
 
         ## check installed
         allready_installed=N
         if [ -f $ENV_FILE_ETC ]; then
             allready_installed=Y
             # make backup
-            BACKUP_FOLDER=$ETC_DIR/backup/$(date +%Y-%m-%d-%H-%M-%S)
-            rm -rf $BACKUP_FOLDER
-            mkdir -p $BACKUP_FOLDER
+            BACKUP_FOLDER="$ETC_DIR/backup/$(date +%Y-%m-%d-%H-%M-%S)"
+            rm -rf "$BACKUP_FOLDER"
+            mkdir -p "$BACKUP_FOLDER"
             for file in $(ls $ETC_DIR | grep -v -e backup); do
-                if [ $file != "backup" ]; then
-                    cp -r $ETC_DIR/$file $BACKUP_FOLDER
-                    info backup $file
+                if [ "$file" != "backup" ]; then
+                    cp -r "$ETC_DIR/$file" "$BACKUP_FOLDER"
+                    info backup "$file"
                 fi
             done
             if [ -f /usr/local/bin/ferrumgate ]; then
-                cp /usr/local/bin/ferrumgate $BACKUP_FOLDER
+                cp /usr/local/bin/ferrumgate "$BACKUP_FOLDER"
             fi
 
         fi
@@ -623,19 +623,19 @@ EOF
             sed -i "s/??GATEWAY_ID/$GATEWAY_ID/g" $DOCKER_FILE
             sed -i 's/??SSH_PORT/9999/g' $DOCKER_FILE
 
-            DOCKER_FILE_GATEWAY_ETC=$ETC_DIR/gateway.$GATEWAY_ID.yaml
-            cp -f $DOCKER_FILE $DOCKER_FILE_GATEWAY_ETC
-            chmod 600 $DOCKER_FILE_GATEWAY_ETC
+            DOCKER_FILE_GATEWAY_ETC="$ETC_DIR/gateway.$GATEWAY_ID.yaml"
+            cp -f "$DOCKER_FILE" "$DOCKER_FILE_GATEWAY_ETC"
+            chmod 600 "$DOCKER_FILE_GATEWAY_ETC"
         else
             info "updating installed version"
             for file in $(ls $ETC_DIR); do
-                result=$(is_gateway_yaml $file)
-                if [ ! -z $result ]; then
+                result=$(is_gateway_yaml "$file")
+                if [ ! -z "$result" ]; then
                     local gateway_id=$(echo "$file" | sed -e "s/gateway.//" -e "s/.yaml//")
-                    local ssh_port=$(cat $ETC_DIR/$file | grep ":9999" | head -n 1 | sed -e "s/-//g" | sed -e "s/ //g" | sed -e "s/\"//g" | cut -d":" -f1)
-                    cp $ETC_DIR/gateway.yaml $ETC_DIR/$file
-                    sed -i "s/??GATEWAY_ID/$gateway_id/g" $ETC_DIR/$file
-                    sed -i "s/??SSH_PORT/$ssh_port/g" $ETC_DIR/$file
+                    local ssh_port=$(cat "$ETC_DIR/$file" | grep ":9999" | head -n 1 | sed -e "s/-//g" | sed -e "s/ //g" | sed -e "s/\"//g" | cut -d":" -f1)
+                    cp "$ETC_DIR/gateway.yaml" "$ETC_DIR/$file"
+                    sed -i "s/??GATEWAY_ID/$gateway_id/g" "$ETC_DIR/$file"
+                    sed -i "s/??SSH_PORT/$ssh_port/g" "$ETC_DIR/$file"
                     info "updated $file"
 
                 fi
@@ -653,12 +653,12 @@ EOF
 
         if [ $ENV_FOR != "PROD" ]; then
 
-            docker compose -f $DOCKER_FILE_BASE_ETC --env-file $ENV_FILE_ETC pull
+            docker compose -f "$DOCKER_FILE_BASE_ETC" --env-file "$ENV_FILE_ETC" pull
             for file in $(ls $ETC_DIR); do
-                result=$(is_gateway_yaml $file)
-                if [ ! -z $result ]; then
+                result=$(is_gateway_yaml "$file")
+                if [ ! -z "$result" ]; then
 
-                    docker compose -f $ETC_DIR/$file --env-file $ENV_FILE_ETC pull
+                    docker compose -f "$ETC_DIR/$file" --env-file "$ENV_FILE_ETC" pull
                 fi
             done
             ferrumgate --restart
@@ -668,4 +668,4 @@ EOF
     fi
 }
 
-main $*
+main "$*"

@@ -18,7 +18,7 @@ fatal() {
     exit 1
 }
 debug() {
-    if [ $ENV_FOR != "PROD" ]; then
+    if [ "$ENV_FOR" != "PROD" ]; then
         echo '[INFO] ' "$@"
     fi
 }
@@ -152,16 +152,16 @@ ensure_root() {
 
 }
 is_gateway_yaml() {
-    result=$(echo $1 | grep -E "gateway\.\w+\.yaml" || true)
-    echo $result
+    result=$(echo "$1" | grep -E "gateway\.\w+\.yaml" || true)
+    echo "$result"
 }
 
 find_default_gateway() {
     for file in $(ls $ETC_DIR); do
-        local result=$(is_gateway_yaml $file)
-        if [ ! -z $result ]; then
+        local result=$(is_gateway_yaml "$file")
+        if [ ! -z "$result" ]; then
             local gatewayId=$(echo "$file" | sed -e "s/gateway.//" -e "s/.yaml//")
-            echo $gatewayId
+            echo "$gatewayId"
             break
         fi
     done
@@ -175,46 +175,51 @@ logs() {
     local gateway_id=$1
     local grepname=fg-$gateway_id
 
-    if [ $service = "rest" ]; then
+    if [ "$service" = "rest" ]; then
         grepname=fg-base
         service="rest.portal"
     fi
-    if [ $service = "redis" ]; then
+    if [ "$service" = "redis" ]; then
         grepname=fg-base
     fi
-    if [ $service = "es" ]; then
+    if [ "$service" = "es" ]; then
         grepname=fg-base
     fi
-    if [ $service = "task" ]; then
+    if [ "$service" = "task" ]; then
         grepname=fg-base
         service="task"
     fi
     if [ $service = "log" ]; then
         grepname=fg-base
     fi
-    if [ $service = "parser" ]; then
+    if [ "$service" = "parser" ]; then
         grepname=fg-base
     fi
 
-    if [ $service = "ssh" ]; then
+    if [ "$service" = "ssh" ]; then
         service="server.ssh"
     fi
-    if [ $service = "admin" ]; then
+
+    if [ "$service" = "quic" ]; then
+        service="server.quic"
+    fi
+
+    if [ "$service" = "admin" ]; then
         service="job.admin"
     fi
 
-    docker ps | grep $grepname | grep $service | cut -d" " -f1 | head -n1 | xargs -r docker logs -f
+    docker ps | grep "$grepname" | grep "$service" | cut -d" " -f1 | head -n1 | xargs -r docker logs -f
 }
 
 list_gateways() {
 
     for file in $(ls $ETC_DIR); do
-        local result=$(is_gateway_yaml $file)
-        if [ ! -z $result ]; then
+        local result=$(is_gateway_yaml "$file")
+        if [ ! -z "$result" ]; then
 
             local gatewayId=$(echo "$file" | sed -e "s/gateway.//" -e "s/.yaml//")
 
-            info $gatewayId
+            info "$gatewayId"
 
         fi
     done
@@ -224,11 +229,11 @@ delete_gateway() {
         error "no arguments supplied"
         exit 1
     fi
-    local gateway_id=$1
-    stop_gateway $gateway_id
-    rm -rf $ETC_DIR/gateway.$gateway_id.yaml
-    docker network ls | grep $gateway_id | tr -s ' ' | cut -d' ' -f2 | xargs -r docker network rm
-    docker volume ls | grep $gateway_id | tr -s ' ' | cut -d' ' -f2 | xargs -r docker volume rm
+    local gateway_id="$1"
+    stop_gateway "$gateway_id"
+    rm -rf "$ETC_DIR/gateway.$gateway_id.yaml"
+    docker network ls | grep "$gateway_id" | tr -s ' ' | cut -d' ' -f2 | xargs -r docker network rm
+    docker volume ls | grep "$gateway_id" | tr -s ' ' | cut -d' ' -f2 | xargs -r docker volume rm
 
 }
 
@@ -241,14 +246,14 @@ create_gateway() {
     fi
     ## this must be lowercase , we are using with docker compose -p
 
-    if [ -z $gateway_id ]; then
+    if [ -z "$gateway_id" ]; then
         gateway_id=$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w 16 | head -n 1 | tr '[:upper:]' '[:lower:]')
     fi
-    DOCKER_FILE=$ETC_DIR/gateway.$gateway_id.yaml
-    rm -rf $DOCKER_FILE
-    cp $ETC_DIR/gateway.yaml $DOCKER_FILE
-    sed -i "s/??GATEWAY_ID/$gateway_id/g" $DOCKER_FILE
-    sed -i "s/??SSH_PORT/$port/g" $DOCKER_FILE
+    DOCKER_FILE="$ETC_DIR/gateway.$gateway_id.yaml"
+    rm -rf "$DOCKER_FILE"
+    cp "$ETC_DIR/gateway.yaml" "$DOCKER_FILE"
+    sed -i "s/??GATEWAY_ID/$gateway_id/g" "$DOCKER_FILE"
+    sed -i "s/??SSH_PORT/$port/g" "$DOCKER_FILE"
     info "created gateway $gateway_id at port $port"
     info "start gateway"
 }
@@ -257,13 +262,13 @@ recreate_gateway() {
     read -p -r "enter a port for ssh tunnel server: " port
     ## this must be lowercase , we are using with docker compose -p
     read -p -r "enter gateway id:" gateway_id
-    create_gateway $port $gateway_id
+    create_gateway "$port" "$gateway_id"
 }
 
 is_master_host() {
     local role=$(get_config ROLES)
-    local count=$(echo $role | grep "master" | wc -l)
-    if [ ! $count -eq "0" ]; then
+    local count=$(echo "$role" | grep "master" | wc -l)
+    if [ ! "$count" -eq "0" ]; then
         echo "yes"
     else
         echo "no"
@@ -272,8 +277,8 @@ is_master_host() {
 
 is_worker_host() {
     local role=$(get_config ROLES)
-    local count=$(echo $role | grep "worker" | wc -l)
-    if [ ! $count -eq "0" ]; then
+    local count=$(echo "$role" | grep "worker" | wc -l)
+    if [ ! "$count" -eq "0" ]; then
         echo "yes"
     else
         echo "no"
@@ -282,25 +287,25 @@ is_worker_host() {
 
 get_docker_profile() {
     local profile=""
-    if [ $(is_master_host) = "yes" ]; then
+    if [ "$(is_master_host)" = "yes" ]; then
         profile="$profile --profile master"
     fi
 
-    if [ $(is_worker_host) = "yes" ]; then
+    if [ "$(is_worker_host)" = "yes" ]; then
         profile="$profile --profile worker"
     fi
-    echo $profile
+    echo "$profile"
 }
 
 start_base() {
     info "starting base"
 
-    docker compose -f $ETC_DIR/base.yaml --env-file $ETC_DIR/env \
+    docker compose -f "$ETC_DIR/base.yaml" --env-file "$ETC_DIR/env" \
         $(get_docker_profile) -p fg-base up -d --remove-orphans
 }
 stop_base() {
     info "stoping base"
-    docker compose -f $ETC_DIR/base.yaml --env-file $ETC_DIR/env \
+    docker compose -f "$ETC_DIR/base.yaml" --env-file "$ETC_DIR/env" \
         -p fg-base down
 }
 
@@ -312,28 +317,28 @@ start_gateway() {
 
     local gatewayId=$1
     info "starting gateway $gatewayId"
-    local FILE=$ETC_DIR/gateway.$gatewayId.yaml
+    local FILE="$ETC_DIR/gateway.$gatewayId.yaml"
     # just worker node
-    if [ $(is_worker_host) = "yes" ] && [ $(is_master_host) = "no" ]; then
+    if [ "$(is_worker_host)" = "yes" ] && [ "$(is_master_host)" = "no" ]; then
         info "this is a worker node"
         #sed -i "s|external:.*|external: false|g" $FILE
-        yq -yi ".services.\"server-quic\".extra_hosts[0] |= \"registry.ferrumgate.zero:192.168.88.40\"" $FILE
+        yq -yi ".services.\"server-quic\".extra_hosts[0] |= \"registry.ferrumgate.zero:192.168.88.40\"" "$FILE"
         local peers=$(get_config CLUSTER_NODE_PEERSW)
-        if [ ! -z $peers ]; then
-            local tmp=$(echo $peers | cut -d'=' -f2-)
-            local ip=$(echo $tmp | cut -d'/' -f3)
-            yq -yi ".services.\"server-quic\".extra_hosts[1] |= \"redis-ha:$ip\"" $FILE
-            yq -yi ".services.\"server-quic\".extra_hosts[2] |= \"redis-local:$ip\"" $FILE
-            yq -yi ".services.\"server-quic\".extra_hosts[3] |= \"es-ha:$ip\"" $FILE
-            yq -yi ".services.\"server-quic\".extra_hosts[4] |= \"log:$ip\"" $FILE
+        if [ ! -z "$peers" ]; then
+            local tmp=$(echo "$peers" | cut -d'=' -f2-)
+            local ip=$(echo "$tmp" | cut -d'/' -f3)
+            yq -yi ".services.\"server-quic\".extra_hosts[1] |= \"redis-ha:$ip\"" "$FILE"
+            yq -yi ".services.\"server-quic\".extra_hosts[2] |= \"redis-local:$ip\"" "$FILE"
+            yq -yi ".services.\"server-quic\".extra_hosts[3] |= \"es-ha:$ip\"" "$FILE"
+            yq -yi ".services.\"server-quic\".extra_hosts[4] |= \"log:$ip\"" "$FILE"
         fi
 
     else
         #sed -i "s|external:.*|external: true|g" $FILE
-        yq -yi ".services.\"server-quic\".extra_hosts[0] |= \"registry.ferrumgate.zero:192.168.88.40\"" $FILE
+        yq -yi ".services.\"server-quic\".extra_hosts[0] |= \"registry.ferrumgate.zero:192.168.88.40\"" "$FILE"
     fi
-    docker compose -f $FILE --env-file $ETC_DIR/env \
-        $(get_docker_profile) -p fg-$gatewayId up -d --remove-orphans
+    docker compose -f "$FILE" --env-file "$ETC_DIR/env" \
+        $(get_docker_profile) -p "fg-$gatewayId" up -d --remove-orphans
 }
 
 prepare_env() {
@@ -344,12 +349,12 @@ prepare_env() {
     if [ -z "$is_redis_clustered" ]; then
         info "redis is not clustered"
         set_config REDIS_PROXY_HOST "$redis_host"
-        local redis_host_ssh=$(echo $redis_host | sed 's/:/#/g')
+        local redis_host_ssh=$(echo "$redis_host" | sed 's/:/#/g')
         set_config REDIS_HOST_SSH "$redis_host_ssh"
     else
         info "redis is clustered"
         set_config REDIS_PROXY_HOST "$redis_ha_host"
-        local redis_host_ssh=$(echo $redis_ha_host | sed 's/:/#/g')
+        local redis_host_ssh=$(echo "$redis_ha_host" | sed 's/:/#/g')
         set_config REDIS_HOST_SSH "$redis_host_ssh"
 
     fi
@@ -375,11 +380,11 @@ prepare_env() {
         set_config ES_PROXY_HOST "$es_ha_host"
     fi
 
-    if [ $(is_master_host) = "no" ] && [ $(is_worker_host) = "yes" ]; then
+    if [ "$(is_master_host)" = "no" ] && [ "$(is_worker_host)" = "yes" ]; then
         #if this is a worker host
         set_config ES_PROXY_HOST "$es_ha_host"
         set_config REDIS_PROXY_HOST "$redis_ha_host"
-        local redis_host_ssh=$(echo $redis_ha_host | sed 's/:/#/g')
+        local redis_host_ssh=$(echo "$redis_ha_host" | sed 's/:/#/g')
         set_config REDIS_HOST_SSH "$redis_host_ssh"
 
     fi
@@ -388,17 +393,17 @@ prepare_env() {
 start_base_and_gateways() {
     prepare_env
 
-    if [ $(is_cluster_working) = "no" ]; then
+    if [ "$(is_cluster_working)" = "no" ]; then
         start_cluster
     fi
 
     start_base
 
     for file in $(ls $ETC_DIR); do
-        local result=$(is_gateway_yaml $file)
-        if [ ! -z $result ]; then
+        local result=$(is_gateway_yaml "$file")
+        if [ ! -z "$result" ]; then
             local gatewayId=$(echo "$file" | sed -e "s/gateway.//" -e "s/.yaml//")
-            start_gateway $gatewayId
+            start_gateway "$gatewayId"
         fi
     done
 
@@ -412,18 +417,18 @@ stop_gateway() {
 
     local gatewayId=$1
     info "stoping gateway $gatewayId"
-    docker compose -f $ETC_DIR/gateway.$gatewayId.yaml --env-file $ETC_DIR/env \
-        -p fg-$gatewayId down
+    docker compose -f "$ETC_DIR/gateway.$gatewayId.yaml" --env-file "$ETC_DIR/env" \
+        -p "fg-$gatewayId" down
 }
 
 stop_base_and_gateways() {
 
     for file in $(ls $ETC_DIR); do
-        local result=$(is_gateway_yaml $file)
-        if [ ! -z $result ]; then
+        local result=$(is_gateway_yaml "$file")
+        if [ ! -z "$result" ]; then
 
             local gatewayId=$(echo "$file" | sed -e "s/gateway.//" -e "s/.yaml//")
-            stop_gateway $gatewayId
+            stop_gateway "$gatewayId"
         fi
     done
     stop_base
@@ -451,8 +456,8 @@ get_config() {
     local key=$1
 
     file=$ETC_DIR/env
-    value=$(cat $file | grep $key= | cut -d"=" -f2-)
-    echo $value
+    value=$(cat "$file" | grep "$key=" | cut -d"=" -f2-)
+    echo "$value"
 }
 
 get_config_from() {
@@ -462,12 +467,12 @@ get_config_from() {
     fi
 
     local key=$1
-    value=$(echo "$2" | grep $key= | cut -d"=" -f2-)
-    echo $value
+    value=$(echo "$2" | grep "$key=" | cut -d"=" -f2-)
+    echo "$value"
 }
 
 show_config() {
-    get_config $1
+    get_config "$1"
 }
 
 change_config() {
@@ -477,15 +482,15 @@ change_config() {
     fi
 
     local param=$1
-    local key=$(echo $param | cut -d'=' -f1)
-    local value=$(echo $param | cut -d'=' -f2-)
+    local key=$(echo "$param" | cut -d'=' -f1)
+    local value=$(echo "$param" | cut -d'=' -f2-)
 
-    if [ $key = "ES_HOST" ]; then
+    if [ "$key" = "ES_HOST" ]; then
 
         set_config ES_HOST "$value"
         set_config ES_INTEL_HOST "$value"
     fi
-    if [ $key = "ES_PASS" ]; then
+    if [ "$key" = "ES_PASS" ]; then
 
         set_config ES_PASS "$value"
         set_config ES_INTEL_PASS "$value"
@@ -503,7 +508,7 @@ create_cluster_ip() {
     echo "169.254.254.$random"
 }
 show_version() {
-    echo $VERSION
+    echo "$VERSION"
 }
 
 cluster_info() {
@@ -515,7 +520,7 @@ cluster_info() {
 }
 is_cluster_working() {
     local count=$(ip a | grep wgferrum | wc -l)
-    if [ ! $count -eq "0" ]; then
+    if [ ! "$count" -eq "0" ]; then
         echo "yes"
     else
         echo "no"
@@ -524,7 +529,7 @@ is_cluster_working() {
 
 stop_cluster() {
 
-    if [ $(is_cluster_working) = "no" ]; then
+    if [ "$(is_cluster_working)" = "no" ]; then
         info "cluster is not working"
         return
     fi
@@ -568,12 +573,12 @@ start_cluster() {
     echo "[Interface]" >$FILE
     echo "Address=$node_ip/32" >>$FILE
     echo "ListenPort=$node_port" >>$FILE
-    echo "PrivateKey=$(echo $node_private_key | xxd -r -p | base64)" >>$FILE
+    echo "PrivateKey=$(echo "$node_private_key" | xxd -r -p | base64)" >>$FILE
     for line in $node_peers; do
         echo "[Peer]" >>$FILE
-        echo "Endpoint=$(echo $line | cut -d'/' -f2)" >>$FILE
-        echo "AllowedIPs=$(echo $line | cut -d'/' -f3)" >>$FILE
-        echo "PublicKey=$(echo $line | cut -d'/' -f4 | xxd -r -p | base64)" >>$FILE
+        echo "Endpoint=$(echo "$line" | cut -d'/' -f2)" >>$FILE
+        echo "AllowedIPs=$(echo "$line" | cut -d'/' -f3)" >>$FILE
+        echo "PublicKey=$(echo "$line" | cut -d'/' -f4 | xxd -r -p | base64)" >>$FILE
     done
 
     # start worker interfaces
@@ -581,16 +586,16 @@ start_cluster() {
     local node_port=$(get_config CLUSTER_NODE_PORTW)
 
     FILE=/etc/wireguard/wgferrumw.conf
-    echo "[Interface]" >$FILE
-    echo "Address=$node_ip/32" >>$FILE
-    echo "ListenPort=$node_port" >>$FILE
-    echo "PrivateKey=$(echo $node_private_key | xxd -r -p | base64)" >>$FILE
+    echo "[Interface]" >"$FILE"
+    echo "Address=$node_ip/32" >>"$FILE"
+    echo "ListenPort=$node_port" >>"$FILE"
+    echo "PrivateKey=$(echo "$node_private_key" | xxd -r -p | base64)" >>"$FILE"
     local node_peersw=$(get_config CLUSTER_NODE_PEERSW)
     for line in $node_peersw; do
-        echo "[Peer]" >>$FILE
-        echo "Endpoint=$(echo $line | cut -d'/' -f2)" >>$FILE
-        echo "AllowedIPs=$(echo $line | cut -d'/' -f3)" >>$FILE
-        echo "PublicKey=$(echo $line | cut -d'/' -f4 | xxd -r -p | base64)" >>$FILE
+        echo "[Peer]" >>"$FILE"
+        echo "Endpoint=$(echo "$line" | cut -d'/' -f2)" >>"$FILE"
+        echo "AllowedIPs=$(echo "$line" | cut -d'/' -f3)" >>"$FILE"
+        echo "PublicKey=$(echo "$line" | cut -d'/' -f4 | xxd -r -p | base64)" >>"$FILE"
         echo ""
     done
 
@@ -611,11 +616,11 @@ create_cluster_private_key() {
     wg genkey | base64 -d | xxd -p -c 256
 }
 create_cluster_public_key() {
-    echo $1 | xxd -r -p | base64 | wg pubkey | base64 -d | xxd -p -c 256
+    echo "$1" | xxd -r -p | base64 | wg pubkey | base64 -d | xxd -p -c 256
 }
 recreate_cluster_keys() {
     local pri=$(create_cluster_private_key)
-    local pub=$(create_cluster_public_key $pri)
+    local pub=$(create_cluster_public_key "$pri")
     set_config CLUSTER_NODE_PRIVATE_KEY "$pri"
     set_config CLUSTER_NODE_PUBLIC_KEY "$pub"
     info "recreated keys"
@@ -637,7 +642,7 @@ show_cluster_info() {
 show_cluster_config() {
 
     local cluster_public_ip=$(get_config CLUSTER_NODE_PUBLIC_IP)
-    if [ -z "$cluster_public_ip" ] && [ $(is_master_host) = "yes" ]; then
+    if [ -z "$cluster_public_ip" ] && [ "$(is_master_host)" = "yes" ]; then
         echo "please set host public ip and port that other master hosts can reach master, with below commands"
         echo "ferrumgate --set-config CLUSTER_NODE_PUBLIC_IP=\$IP"
         echo "ferrumgate --set-config CLUSTER_NODE_PUBLIC_PORT=\$PORT"
@@ -645,7 +650,7 @@ show_cluster_config() {
     fi
 
     local cluster_public_port=$(get_config CLUSTER_NODE_PUBLIC_PORT)
-    if [ -z "$cluster_public_port" ] && [ $(is_master_host) = "yes" ]; then
+    if [ -z "$cluster_public_port" ] && [ "$(is_master_host)" = "yes" ]; then
         echo "please set host public ip that other master hosts can reach to this master, with below commands"
         echo "ferrumgate --set-config CLUSTER_NODE_PUBLIC_IP=\$IP"
         echo "ferrumgate --set-config CLUSTER_NODE_PUBLIC_PORT=\$PORT"
@@ -679,7 +684,7 @@ show_cluster_config() {
     echo ""
     echo "**** current peers *****"
     for line in $node_peers; do
-        echo $line
+        echo "$line"
     done
 
     echo ""
@@ -692,9 +697,9 @@ show_cluster_config() {
     echo "**** commands **********"
     echo "PEER=\"$node_host/$cluster_public_ip:$cluster_public_port/$node_ip/$node_public_key\""
     echo "ferrumgate --add-cluster-peer \$PEER"
-    echo "wg set wgferrum peer $(echo $node_public_key | xxd -r -p | base64) allowed-ips $node_ip"
+    echo "wg set wgferrum peer $(echo "$node_public_key" | xxd -r -p | base64) allowed-ips $node_ip"
     echo "******************************************************************************"
-    if [ $(is_master_host) = "yes" ]; then
+    if [ "$(is_master_host)" = "yes" ]; then
         echo "PEER=$node_host/$cluster_public_ip:$cluster_public_port/$node_ip/$node_public_key"
         echo "PEERW=$node_host/$cluster_public_ipw:$cluster_public_portw/$node_ipw/$node_public_key"
     else
@@ -723,7 +728,7 @@ get_cluster_config_public_peer() {
         set_config CLUSTER_NODE_PUBLIC_PORTW 54309
     fi
     local node_public_key=$(get_config CLUSTER_NODE_PUBLIC_KEY)
-    if [ $(is_master_host) = "yes" ]; then
+    if [ "$(is_master_host)" = "yes" ]; then
         echo "PEER=$node_host/$cluster_public_ip:$cluster_public_port/$node_ip/$node_public_key"
         echo "PEERW=$node_host/$cluster_public_ip:$cluster_public_portw/$node_ipw/$node_public_key"
     else
@@ -741,21 +746,22 @@ add_cluster_peer() {
     local node_peers=$(get_config CLUSTER_NODE_PEERS)
     local node_host=$(get_config CLUSTER_NODE_HOST)
     local node_ip=$(get_config CLUSTER_NODE_IP)
-    local input_host=$(echo $input | cut -d'/' -f1)
+    local input_host=$(echo "$input" | cut -d'/' -f1)
 
-    if [ $input_host = $node_host ]; then
+    if [ "$input_host" = "$node_host" ]; then
         error "you can not add this host to cluster peers"
         return
     fi
 
     local peer=""
     for line in $node_peers; do
-        local host=$(echo $line | cut -d'/' -f1)
-        if [ $host != $input_host ]; then
+        local host=$(echo "$line" | cut -d'/' -f1)
+        if [ "$host" != "$input_host" ]; then
             peer="$peer $line"
         fi
     done
     peer="$peer $input"
+    # shellcheck disable=SC2086
     peer=$(echo $peer) #trim
 
     set_config CLUSTER_NODE_PEERS "$peer"
@@ -772,12 +778,12 @@ remove_cluster_peer() {
     local node_peers=$(get_config CLUSTER_NODE_PEERS)
     local node_host=$(get_config CLUSTER_NODE_HOST)
     local node_ip=$(get_config CLUSTER_NODE_IP)
-    local input_host=$(echo $input | cut -d'/' -f1)
+    local input_host=$(echo "$input" | cut -d'/' -f1)
 
     local peer=""
     for line in $node_peers; do
-        local host=$(echo $line | cut -d'/' -f1)
-        if [ $host != "$input_host" ]; then
+        local host=$(echo "$line" | cut -d'/' -f1)
+        if [ "$host" != "$input_host" ]; then
             peer="$peer $line"
         fi
     done
@@ -837,8 +843,8 @@ add_es_peer() {
     local es_peers=$(get_config CLUSTER_ES_PEERS)
     local node_host=$(get_config CLUSTER_NODE_HOST)
     local node_ip=$(get_config CLUSTER_NODE_IP)
-    local input_host=$(echo $input | cut -d'/' -f1)
-    local input_ip=$(echo $input | cut -d'/' -f3)
+    local input_host=$(echo "$input" | cut -d'/' -f1)
+    local input_ip=$(echo "$input" | cut -d'/' -f3)
 
     local peer=""
     for line in $es_peers; do
@@ -848,7 +854,8 @@ add_es_peer() {
         fi
     done
     peer="$peer $input_host/$input_ip"
-    peer=$(echo "$peer") #trim
+    # shellcheck disable=SC2086
+    peer=$(echo $peer) #trim
 
     set_config CLUSTER_ES_PEERS "$peer"
     info "added to es peers"
@@ -864,12 +871,12 @@ remove_es_peer() {
     local es_peers=$(get_config CLUSTER_ES_PEERS)
     local node_host=$(get_config CLUSTER_NODE_HOST)
     local node_ip=$(get_config CLUSTER_NODE_IP)
-    local input_host=$(echo $input | cut -d'/' -f1)
+    local input_host=$(echo "$input" | cut -d'/' -f1)
 
     local peer=""
     for line in $es_peers; do
-        local host=$(echo $line | cut -d'/' -f1)
-        if [ $host != $input_host ]; then
+        local host=$(echo "$line" | cut -d'/' -f1)
+        if [ "$host" != "$input_host" ]; then
             if [ -z "$peer" ]; then
                 peer="$line"
             else
@@ -894,7 +901,7 @@ upgrade_to_worker() {
 show_config_all() {
     cat /etc/ferrumgate/env
     echo "**********************************************"
-
+    # shellcheck disable=SC2022
     echo "ferrumgate --set-config-all \"$(cat /etc/ferrumgate/env | base64 -w 0)\""
 }
 ##
@@ -934,7 +941,7 @@ set_config_all() {
     local ferrum_cloud_token=$(get_config_from FERRUM_CLOUD_TOKEN "$input")
     set_config FERRUM_CLOUD_TOKEN "$ferrum_cloud_token"
 
-    if [ $(is_master_host) = "yes" ]; then
+    if [ "$(is_master_host)" = "yes" ]; then
 
         local node_ipw=$(get_config_from CLUSTER_NODE_IPW "$input")
         set_config CLUSTER_NODE_IPW "$node_ipw"
@@ -1000,9 +1007,9 @@ create_cluster() {
         set_config CLUSTER_NODE_PEERS ""
         set_config CLUSTER_ES_PEERS ""
         for line in $(echo "$peers" | tr " " "\n"); do
-            local peer=$(echo $line | cut -d'=' -f1)
+            local peer=$(echo "$line" | cut -d'=' -f1)
             if [ "$peer" = "PEER" ]; then
-                local tmp=$(echo $line | cut -d'=' -f2-)
+                local tmp=$(echo "$line" | cut -d'=' -f2-)
                 info "adding $tmp"
                 add_cluster_peer "$tmp"
                 add_es_peer "$tmp"
@@ -1019,7 +1026,7 @@ update_cluster() {
 }
 
 cluster_add_worker() {
-    if [ $(is_master_host) = "no" ]; then
+    if [ "$(is_master_host)" = "no" ]; then
         error "only master can add worker"
         info "ferrumgate --upgrade-to-master"
         return
@@ -1032,9 +1039,9 @@ cluster_add_worker() {
         local peers=$(cat)
         set_config CLUSTER_NODE_PEERSW ""
         for line in $(echo "$peers" | tr " " "\n"); do
-            local peer=$(echo $line | cut -d'=' -f1)
+            local peer=$(echo "$line" | cut -d'=' -f1)
             if [ "$peer" = "PEERW" ]; then
-                local tmp=$(echo $line | cut -d'=' -f2-)
+                local tmp=$(echo "$line" | cut -d'=' -f2-)
                 info "adding $tmp"
                 if [ -z "$saved_peers" ]; then
                     saved_peers="$tmp"
@@ -1071,9 +1078,9 @@ cluster_join() {
 
     set_config CLUSTER_NODE_PEERSW ""
     for line in $(echo "$peers" | tr " " "\n"); do
-        local peer=$(echo $line | cut -d'=' -f1)
+        local peer=$(echo "$line" | cut -d'=' -f1)
         if [ "$peer" = "PEERW" ]; then
-            local tmp=$(echo $line | cut -d'=' -f2-)
+            local tmp=$(echo "$line" | cut -d'=' -f2-)
             set_config CLUSTER_NODE_PEERSW "$tmp"
             break
         fi
@@ -1091,7 +1098,7 @@ create_cluster_public_key() {
 
 regenerate_cluster_keys() {
     local pri=$(create_cluster_private_key)
-    local pub=$(create_cluster_public_key $pri)
+    local pub=$(create_cluster_public_key "$pri")
     set_config CLUSTER_NODE_PRIVATE_KEY "$pri"
     set_config CLUSTER_NODE_PUBLIC_KEY "$pub"
     info "regenerated keys"
@@ -1352,6 +1359,7 @@ main() {
         --cluster-join)
             opt=39
             shift
+            # shellcheck disable=SC2236
             if [ ! -z "$3" ]; then
                 parameter_name="$3"
                 shift
