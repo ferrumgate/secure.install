@@ -143,10 +143,10 @@ services:
         peers="${CLUSTER_NODE_PEERS}"
         for line in $$peers;do
           
-          host=$$(echo $$line|cut -d'/' -f1);
-          ip=$$(echo $$line|cut -d'/' -f3);
+          host=$$(echo "$$line"|cut -d'/' -f1);
+          ip=$$(echo "$$line"|cut -d'/' -f3);
           
-          if [ ! -z $$host ] && [ ! -z $$ip ];then
+          if [ ! -z "$$host" ] && [ ! -z "$$ip" ];then
           echo " server $$host $$ip:6379 check inter 3s  fall 3  rise 21" >> $$CONF_FILE
           fi
 
@@ -207,7 +207,7 @@ services:
         peersw="${CLUSTER_NODE_PEERSW}"
         roles_count=$$(echo $$roles | grep master | wc -l)
         if [ $$roles_count = 0 ];then
-          ip=$$(echo $$peersw | cut -d'/' -f3)
+          ip=$$(echo "$$peersw" | cut -d'/' -f3)
           if [ $$(cat $$CONF_FILE | grep replicaof | wc -l) = 0 ];then
              echo "replicaof $$ip 7380" >> $$CONF_FILE
           else
@@ -263,7 +263,7 @@ services:
         fi
 
         redis_master=${CLUSTER_REDIS_MASTER}
-        if [ ! -z $${redis_master} ];then
+        if [ ! -z "$${redis_master}" ];then
           echo "starting sentinel"
           redis-server $$CONF_FILE --sentinel
         else
@@ -282,7 +282,7 @@ services:
     volumes:
       - redis-intel-sentinel:/data
     depends_on:
-      - redis
+      - redis-intel
     logging:
       driver: local
     profiles:
@@ -456,15 +456,15 @@ services:
         EOF
 
         peers="${CLUSTER_ES_PEERS}"
-        if [ -z $$peers ];then
+        if [ ! -z "$$peers" ];then
           backup="";
           for line in $$peers;do
-            host=$$(echo $$line|cut -d'/' -f1);
-            ip=$$(echo $$line|cut -d'/' -f2);
+            host=$$(echo "$$line"|cut -d'/' -f1);
+            ip=$$(echo "$$line"|cut -d'/' -f2);
             
-            if [ ! -z $$host ] && [ ! -z $$ip ];then
+            if [ ! -z "$$host" ] && [ ! -z "$$ip" ];then
               backup_str=""
-              if [ -z $$backup ];then
+              if [ -z "$$backup" ];then
                   backup_str="";
               else
                   backup_str="backup"
@@ -556,8 +556,8 @@ services:
         delay: 5s
       mode: global
     depends_on:
-      - redis
-      - es
+      - redis-ha
+      - es-ha
     networks:
       - ferrum
     volumes:
@@ -597,7 +597,7 @@ services:
       restart_policy:
         delay: 5s
     depends_on:
-      - redis
+      - redis-ha
     networks:
       - ferrum
     logging:
@@ -633,7 +633,7 @@ services:
     networks:
       - ferrum
     depends_on:
-      - redis
+      - redis-ha
     logging:
       driver: local
     profiles:
@@ -667,18 +667,16 @@ services:
     networks:
       - ferrum
     depends_on:
-      - redis
+      - redis-ha
     logging:
       driver: local
     profiles:
       - master
 
   node:
-    image: "??PRIVATE_REGISTRY/ferrumgate/job.admin:2.0.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.task:2.0.0"
     restart: always
-    privileged: true
     environment:
-      - MODE=node
       - ROLES=${ROLES}
       - REDIS_HOST=${REDIS_PROXY_HOST}
       - REDIS_PASS=${REDIS_PASS}
@@ -694,20 +692,25 @@ services:
       - ES_INTEL_USER=${ES_INTEL_USER}
       - ES_INTEL_PASS=${ES_INTEL_PASS}
       - NODE_ID=${NODE_ID}
+      - VERSION=${VERSION}
       - CLUSTER_NODE_HOST=${CLUSTER_NODE_HOST}
+      - CLUSTER_NODE_IP=${CLUSTER_NODE_IP}
+      - CLUSTER_NODE_PORT=${CLUSTER_NODE_PORT}
       - CLUSTER_NODE_IPW=${CLUSTER_NODE_IPW}
       - CLUSTER_NODE_PORTW=${CLUSTER_NODE_PORTW}
+      - CLUSTER_NODE_PUBLIC_KEY=${CLUSTER_NODE_PUBLIC_KEY}
       - FERRUM_CLOUD_ID=${FERRUM_CLOUD_ID}
       - FERRUM_CLOUD_URL=${FERRUM_CLOUD_URL}
       - FERRUM_CLOUD_TOKEN=${FERRUM_CLOUD_TOKEN}
+      - MODULE_NODE=true
     deploy:
       mode: global
       restart_policy:
         delay: 5s
-    volumes:
-      - /etc/ferrumgate/env:/etc/ferrumgate/env
     networks:
       - ferrum
+    depends_on:
+      - redis-ha
     logging:
       driver: local
     profiles:

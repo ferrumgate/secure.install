@@ -70,6 +70,7 @@ print_usage() {
     echo "  ferrumgate [ --create-gateway ] -> creates a new gateway"
     echo "  ferrumgate [ --recreate-gateway ] -> recreates a gateway"
     echo "  ferrumgate [ --create-cluster ] -> create a cluster"
+    echo "  ferrumgate [ --update-cluster ] -> update a cluster"
     echo "  ferrumgate [ --start-cluster ] -> starts cluster"
     echo "  ferrumgate [ --stop-cluster ] -> stop cluster"
     echo "  ferrumgate [ --restart-cluster ] -> restart cluster"
@@ -120,8 +121,8 @@ status_service() {
 ETC_DIR=/etc/ferrumgate
 
 uninstall() {
-    read -p "are you sure [Yn] " yesno
-    if [ $yesno = "Y" ]; then
+    read -p -r "are you sure [Yn] " yesno
+    if [ "$yesno" = "Y" ]; then
 
         info "uninstall started"
         systemctl stop ferrumgate
@@ -235,7 +236,7 @@ create_gateway() {
     local port=$1
     local gateway_id=$2
     if [ -z "$port" ]; then
-        read -p "enter a port for ssh tunnel server: " p1
+        read -p -r "enter a port for ssh tunnel server: " p1
         port=$p1
     fi
     ## this must be lowercase , we are using with docker compose -p
@@ -253,9 +254,9 @@ create_gateway() {
 }
 
 recreate_gateway() {
-    read -p "enter a port for ssh tunnel server: " port
+    read -p -r "enter a port for ssh tunnel server: " port
     ## this must be lowercase , we are using with docker compose -p
-    read -p "enter gateway id:" gateway_id
+    read -p -r "enter gateway id:" gateway_id
     create_gateway $port $gateway_id
 }
 
@@ -788,37 +789,37 @@ remove_cluster_peer() {
 set_cluster_config() {
     show_cluster_info
     echo "which option do you want to change?"
-    read -p "type host, ip, port, key: " selection
+    read -p -r "type host, ip, port, key: " selection
 
-    if [ $selection = "host" ]; then
-        read -p "enter hostname: " hostname
-        read -p "are you sure [Yn] " yesno
-        if [ $yesno = "Y" ]; then
+    if [ "$selection" = "host" ]; then
+        read -p -r "enter hostname: " hostname
+        read -p -r "are you sure [Yn] " yesno
+        if [ "$yesno" = "Y" ]; then
             set_config CLUSTER_NODE_HOST "$hostname"
             info "cluster host changed"
         fi
     fi
-    if [ $selection = "ip" ]; then
-        read -p "enter ip: " ip
-        read -p "are you sure [Yn] " yesno
-        if [ $yesno = "Y" ]; then
+    if [ "$selection" = "ip" ]; then
+        read -p -r "enter ip: " ip
+        read -p -r "are you sure [Yn] " yesno
+        if [ "$yesno" = "Y" ]; then
             set_config CLUSTER_NODE_IP "$ip"
             info "cluster ip changed"
         fi
     fi
 
-    if [ $selection = "port" ]; then
-        read -p "enter port: " port
-        read -p "are you sure [Yn] " yesno
-        if [ $yesno = "Y" ]; then
+    if [ "$selection" = "port" ]; then
+        read -p -r "enter port: " port
+        read -p -r "are you sure [Yn] " yesno
+        if [ "$yesno" = "Y" ]; then
             set_config CLUSTER_NODE_PORT "$port"
             info "cluster port changed"
         fi
     fi
 
-    if [ $selection = "key" ]; then
-        read -p "are you sure [Yn] " yesno
-        if [ $yesno = "Y" ]; then
+    if [ "$selection" = "key" ]; then
+        read -p -r "are you sure [Yn] " yesno
+        if [ "$yesno" = "Y" ]; then
             recreate_cluster_keys
             info "cluster keys changed"
         fi
@@ -841,13 +842,13 @@ add_es_peer() {
 
     local peer=""
     for line in $es_peers; do
-        local host=$(echo $line | cut -d'/' -f1)
-        if [ $host != $input_host ]; then
+        local host=$(echo "$line" | cut -d'/' -f1)
+        if [ "$host" != "$input_host" ]; then
             peer="$peer $line"
         fi
     done
     peer="$peer $input_host/$input_ip"
-    peer=$(echo $peer) #trim
+    peer=$(echo "$peer") #trim
 
     set_config CLUSTER_ES_PEERS "$peer"
     info "added to es peers"
@@ -966,9 +967,9 @@ create_redis_cluster() {
     # find master host and ip
     for line in $(echo "$peers" | tr " " "\n"); do
         counter=$((counter + 1))
-        local data=$(echo $line | cut -d'=' -f2)
-        peer_host=$(echo $data | cut -d'/' -f1)
-        peer_ip=$(echo $data | cut -d'/' -f3)
+        local data=$(echo "$line" | cut -d'=' -f2)
+        peer_host=$(echo "$data" | cut -d'/' -f1)
+        peer_ip=$(echo "$data" | cut -d'/' -f3)
         if [ $counter -eq 1 ]; then
             master_host=$peer_host
             master_ip=$peer_ip
@@ -978,29 +979,29 @@ create_redis_cluster() {
     set_config CLUSTER_REDIS_MASTER "$master_ip"
     set_config CLUSTER_REDIS_INTEL_MASTER "$master_ip"
 
-    if [ $node_host != $master_host ]; then # this is not master machine
+    if [ "$node_host" != "$master_host" ]; then # this is not master machine
         info "creating redis cluster"
         ## prepare redis
         local port=6379
-        docker run redis:7-bullseye redis-cli --no-auth-warning -h $node_ip -p $port --pass $redis_pass replicaof $master_ip $port
-        docker run redis:7-bullseye redis-cli --no-auth-warning -h $node_ip -p $port --pass $redis_pass config rewrite
+        docker run redis:7-bullseye redis-cli --no-auth-warning -h "$node_ip" -p "$port" --pass "$redis_pass" replicaof "$master_ip $port"
+        docker run redis:7-bullseye redis-cli --no-auth-warning -h "$node_ip" -p "$port" --pass "$redis_pass" config rewrite
         port=6380
-        docker run redis:7-bullseye redis-cli --no-auth-warning -h $node_ip -p $port --pass $redis_pass replicaof $master_ip $port
-        docker run redis:7-bullseye redis-cli --no-auth-warning -h $node_ip -p $port --pass $redis_pass config rewrite
+        docker run redis:7-bullseye redis-cli --no-auth-warning -h "$node_ip" -p "$port" --pass "$redis_pass" replicaof "$master_ip $port"
+        docker run redis:7-bullseye redis-cli --no-auth-warning -h "$node_ip" -p "$port" --pass "$redis_pass" config rewrite
     fi
 
 }
 
 create_cluster() {
-    read -p "do you want to continue [Yn] " yesno
-    if [ $yesno = "Y" ]; then
+    read -p -r "do you want to continue [Yn] " yesno
+    if [ "$yesno" = "Y" ]; then
         echo "paste peers and ctrl-d when done:"
         local peers=$(cat)
         set_config CLUSTER_NODE_PEERS ""
         set_config CLUSTER_ES_PEERS ""
         for line in $(echo "$peers" | tr " " "\n"); do
             local peer=$(echo $line | cut -d'=' -f1)
-            if [ $peer = "PEER" ]; then
+            if [ "$peer" = "PEER" ]; then
                 local tmp=$(echo $line | cut -d'=' -f2-)
                 info "adding $tmp"
                 add_cluster_peer "$tmp"
@@ -1013,6 +1014,9 @@ create_cluster() {
     fi
 
 }
+update_cluster() {
+    create_cluster
+}
 
 cluster_add_worker() {
     if [ $(is_master_host) = "no" ]; then
@@ -1021,21 +1025,21 @@ cluster_add_worker() {
         return
     fi
 
-    read -p "do you want to continue [Yn] " yesno
-    if [ $yesno = "Y" ]; then
+    read -p -r "do you want to continue [Yn] " yesno
+    if [ "$yesno" = "Y" ]; then
         echo "paste peers and ctrl-d when done:"
         local saved_peers=$(get_config CLUSTER_NODE_PEERSW)
         local peers=$(cat)
         set_config CLUSTER_NODE_PEERSW ""
         for line in $(echo "$peers" | tr " " "\n"); do
             local peer=$(echo $line | cut -d'=' -f1)
-            if [ $peer = "PEERW" ]; then
+            if [ "$peer" = "PEERW" ]; then
                 local tmp=$(echo $line | cut -d'=' -f2-)
                 info "adding $tmp"
-                if [ -z $saved_peers ]; then
-                    saved_peers=$(echo "$tmp")
+                if [ -z "$saved_peers" ]; then
+                    saved_peers="$tmp"
                 else
-                    saved_peers=$(echo "$saved_peers $tmp")
+                    saved_peers="$saved_peers $tmp"
                 fi
             fi
         done
@@ -1046,7 +1050,7 @@ cluster_add_worker() {
 
 cluster_join() {
 
-    if [ $(is_worker_host) = "yes" ] && [ $(is_master_host) = "no" ]; then
+    if [ "$(is_worker_host)" = "yes" ] && [ "$(is_master_host)" = "no" ]; then
         echo -n ""
     else
         error "only worker can join"
@@ -1055,8 +1059,8 @@ cluster_join() {
     fi
     local peers=""
     if [ $# -lt 1 ]; then
-        read -p "do you want to continue [Yn] " yesno
-        if [ $yesno != "Y" ]; then
+        read -p -r "do you want to continue [Yn] " yesno
+        if [ "$yesno" != "Y" ]; then
             return
         fi
         echo "paste peer and ctrl-d when done:"
@@ -1068,7 +1072,7 @@ cluster_join() {
     set_config CLUSTER_NODE_PEERSW ""
     for line in $(echo "$peers" | tr " " "\n"); do
         local peer=$(echo $line | cut -d'=' -f1)
-        if [ $peer = "PEERW" ]; then
+        if [ "$peer" = "PEERW" ]; then
             local tmp=$(echo $line | cut -d'=' -f2-)
             set_config CLUSTER_NODE_PEERSW "$tmp"
             break
@@ -1082,7 +1086,7 @@ create_cluster_private_key() {
     wg genkey | base64 -d | xxd -p -c 256
 }
 create_cluster_public_key() {
-    echo $1 | xxd -r -p | base64 | wg pubkey | base64 -d | xxd -p -c 256
+    echo "$1" | xxd -r -p | base64 | wg pubkey | base64 -d | xxd -p -c 256
 }
 
 regenerate_cluster_keys() {
@@ -1142,6 +1146,7 @@ main() {
     show-config-all,\
     set-config-all:,\
     create-cluster,\
+    update-cluster,\
     cluster-add-worker,\
     cluster-join::,\
     regenerate-cluster-keys,\
@@ -1347,7 +1352,7 @@ main() {
         --cluster-join)
             opt=39
             shift
-            if [ ! -z $3 ]; then
+            if [ ! -z "$3" ]; then
                 parameter_name="$3"
                 shift
             fi
@@ -1373,6 +1378,11 @@ main() {
             shift
             break
             ;;
+        --update-cluster)
+            opt=44
+            shift
+            break
+            ;;
         --)
             shift
             break
@@ -1384,7 +1394,7 @@ main() {
         esac
     done
 
-    if [ -z $gateway_id ]; then
+    if [ -z "$gateway_id" ]; then
         gateway_id=$(find_default_gateway)
     fi
 
@@ -1393,14 +1403,14 @@ main() {
     [ $opt -eq 3 ] && stop_service && exit 0
     [ $opt -eq 4 ] && restart_service && exit 0
     [ $opt -eq 5 ] && status_service && exit 0
-    [ $opt -eq 6 ] && logs $gateway_id $service_name && exit 0
+    [ $opt -eq 6 ] && logs "$gateway_id" "$service_name" && exit 0
     [ $opt -eq 7 ] && uninstall && exit 0
     [ $opt -eq 8 ] && start_base_and_gateways && exit 0
     [ $opt -eq 9 ] && stop_base_and_gateways && exit 0
     [ $opt -eq 10 ] && list_gateways && exit 0
-    [ $opt -eq 11 ] && start_gateway $gateway_id && exit 0
-    [ $opt -eq 12 ] && stop_gateway $gateway_id && exit 0
-    [ $opt -eq 13 ] && delete_gateway $gateway_id && exit 0
+    [ $opt -eq 11 ] && start_gateway "$gateway_id" && exit 0
+    [ $opt -eq 12 ] && stop_gateway "$gateway_id" && exit 0
+    [ $opt -eq 13 ] && delete_gateway "$gateway_id" && exit 0
     [ $opt -eq 14 ] && create_gateway && exit 0
     [ $opt -eq 15 ] && recreate_gateway && exit 0
     [ $opt -eq 16 ] && start_cluster && exit 0
@@ -1408,28 +1418,29 @@ main() {
     [ $opt -eq 18 ] && status_cluster && exit 0
     [ $opt -eq 19 ] && recreate_cluster_keys && exit 0
     [ $opt -eq 20 ] && show_cluster_config && exit 0
-    [ $opt -eq 21 ] && add_cluster_peer $parameter_name && exit 0
-    [ $opt -eq 22 ] && remove_cluster_peer $parameter_name && exit 0
+    [ $opt -eq 21 ] && add_cluster_peer "$parameter_name" && exit 0
+    [ $opt -eq 22 ] && remove_cluster_peer "$parameter_name" && exit 0
     [ $opt -eq 23 ] && set_cluster_config && exit 0
     [ $opt -eq 26 ] && show_es_peers && exit 0
-    [ $opt -eq 27 ] && add_es_peer $parameter_name && exit 0
-    [ $opt -eq 28 ] && remove_es_peer $parameter_name && exit 0
-    [ $opt -eq 29 ] && show_config $parameter_name && exit 0
-    [ $opt -eq 30 ] && change_config $parameter_name && exit 0
+    [ $opt -eq 27 ] && add_es_peer "$parameter_name" && exit 0
+    [ $opt -eq 28 ] && remove_es_peer "$parameter_name" && exit 0
+    [ $opt -eq 29 ] && show_config "$parameter_name" && exit 0
+    [ $opt -eq 30 ] && change_config "$parameter_name" && exit 0
     [ $opt -eq 31 ] && show_version && exit 0
-    [ $opt -eq 32 ] && all_logs $parameter_name && exit 0
+    [ $opt -eq 32 ] && all_logs "$parameter_name" && exit 0
     [ $opt -eq 33 ] && upgrade_to_master && exit 0
     [ $opt -eq 34 ] && upgrade_to_worker && exit 0
     [ $opt -eq 35 ] && show_config_all && exit 0
-    [ $opt -eq 36 ] && set_config_all $parameter_name && exit 0
+    [ $opt -eq 36 ] && set_config_all "$parameter_name" && exit 0
     [ $opt -eq 37 ] && create_cluster && exit 0
     [ $opt -eq 38 ] && cluster_add_worker && exit 0
-    [ $opt -eq 39 ] && cluster_join $parameter_name && exit 0
+    [ $opt -eq 39 ] && cluster_join "$parameter_name" && exit 0
     [ $opt -eq 40 ] && start_cluster && exit 0
     [ $opt -eq 41 ] && regenerate_cluster_keys && exit 0
     [ $opt -eq 42 ] && regenerate_cluster_ips && exit 0
     [ $opt -eq 43 ] && get_cluster_config_public_peer && exit 0
+    [ $opt -eq 44 ] && update_cluster && exit 0
 
 }
 
-main $*
+main "$*"
