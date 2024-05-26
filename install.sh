@@ -417,6 +417,10 @@ main() {
         CLUSTER_NODE_IPW=$(get_config CLUSTER_NODE_IPW)
         if [ -z "$CLUSTER_NODE_IPW" ]; then
             CLUSTER_NODE_IPW=$(create_cluster_ip)
+            # check if same
+            if [ "$CLUSTER_NODE_IP" = "$CLUSTER_NODE_IPW" ]; then
+                CLUSTER_NODE_IPW=$(create_cluster_ip)
+            fi
         fi
 
         CLUSTER_NODE_PORTW=$(get_config CLUSTER_NODE_PORTW)
@@ -628,7 +632,7 @@ EOF
             chmod 600 "$DOCKER_FILE_GATEWAY_ETC"
         else
             info "updating installed version"
-            for file in $(ls $ETC_DIR); do
+            for file in "$$ETC_DIR"/*; do
                 result=$(is_gateway_yaml "$file")
                 if [ ! -z "$result" ]; then
                     local gateway_id=$(echo "$file" | sed -e "s/gateway.//" -e "s/.yaml//")
@@ -654,7 +658,7 @@ EOF
         if [ $ENV_FOR != "PROD" ]; then
 
             docker compose -f "$DOCKER_FILE_BASE_ETC" --env-file "$ENV_FILE_ETC" pull
-            for file in $(ls $ETC_DIR); do
+            for file in "$$ETC_DIR"/*; do
                 result=$(is_gateway_yaml "$file")
                 if [ ! -z "$result" ]; then
 
@@ -668,4 +672,4 @@ EOF
     fi
 }
 
-main "$*"
+main "$@"

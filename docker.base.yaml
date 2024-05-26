@@ -32,10 +32,13 @@ services:
         maxclients 100000
         appendonly yes
         dir /data
+        replica-announce-ip ${CLUSTER_NODE_IP}
+        replica-announce-port 6379
         EOF
         else
         sed -i "s#^requirepass.*#requirepass ${REDIS_PASS}#g" $$CONF_FILE
         sed -i "s#^masterauth.*#masterauth ${REDIS_PASS}#g" $$CONF_FILE
+        sed -i "s#^replica-announce-ip.*#replica-announce-ip ${CLUSTER_NODE_IP}#g" $$CONF_FILE
         fi
 
 
@@ -43,6 +46,7 @@ services:
     restart: always
     ports:
       - ${CLUSTER_NODE_IP}:6379:6379
+      - ${CLUSTER_NODE_IPW}:6379:6379
     deploy:
       mode: replicated
       replicas: 1
@@ -80,11 +84,10 @@ services:
         echo "sentinel parallel-syncs redis 1" >> $$CONF_FILE
         else
         sed -i "s#^sentinel announce-ip.*#sentinel announce-ip ${CLUSTER_NODE_IP}#g" $$CONF_FILE
-        sed -i "s#^sentinel monitor redis.*#sentinel monitor redis ${CLUSTER_REDIS_MASTER} 6379 ${CLUSTER_REDIS_QUORUM}#g" $$CONF_FILE
         sed -i "s#^sentinel auth-pass redis.*#sentinel auth-pass redis ${REDIS_PASS}#g" $$CONF_FILE
         fi
-        redis_master=${CLUSTER_REDIS_MASTER}
-        if [ ! -z $${redis_master} ];then
+        redis_master="${CLUSTER_NODE_PEERS}"
+        if [[ ! -z $${redis_master} ]] && [[ ${REDIS_HOST} == "redis"* ]];then
           echo "starting sentinel"
           redis-server $$CONF_FILE --sentinel
         else
@@ -141,18 +144,19 @@ services:
         EOF
         echo " server ${CLUSTER_NODE_HOST} ${CLUSTER_NODE_IP}:6379 check inter 3s  fall 3  rise 21" >> $$CONF_FILE
         peers="${CLUSTER_NODE_PEERS}"
+
         for line in $$peers;do
           
           host=$$(echo "$$line"|cut -d'/' -f1);
           ip=$$(echo "$$line"|cut -d'/' -f3);
-          
+          port=6379
           if [ ! -z "$$host" ] && [ ! -z "$$ip" ];then
-          echo " server $$host $$ip:6379 check inter 3s  fall 3  rise 21" >> $$CONF_FILE
+          echo " server $$host $$ip:$$port check inter 3s  fall 3  rise 21" >> $$CONF_FILE
           fi
 
         done
 
-        redis_master=${CLUSTER_REDIS_MASTER}
+        redis_master="${CLUSTER_NODE_PEERS}"
         if [ true ] || [ ! -z "$$redis_master" ];then
          echo "starting redis-ha"
          haproxy  -f haproxy.cfg
@@ -175,7 +179,6 @@ services:
       driver: local
     profiles:
       - master
-      - worker
 
   redis-intel:
     image: redis:7-bullseye
@@ -197,10 +200,13 @@ services:
         maxclients 100000
         appendonly yes
         dir /data
+        replica-announce-ip ${CLUSTER_NODE_IP}
+        replica-announce-port 6380
         EOF
         else
         sed -i "s#^requirepass.*#requirepass ${REDIS_INTEL_PASS}#g" $$CONF_FILE
         sed -i "s#^masterauth.*#masterauth ${REDIS_INTEL_PASS}#g" $$CONF_FILE
+        sed -i "s#^replica-announce-ip.*#replica-announce-ip ${CLUSTER_NODE_IP}#g" $$CONF_FILE
         fi
 
         roles="${ROLES}"
@@ -210,15 +216,19 @@ services:
           ip=$$(echo "$$peersw" | cut -d'/' -f3)
           if [ $$(cat $$CONF_FILE | grep replicaof | wc -l) = 0 ];then
              echo "replicaof $$ip 7380" >> $$CONF_FILE
+             echo "replica-priority 0" >> $$CONF_FILE
           else
             sed -i "s#^replicaof.*#replicaof $$ip 7380#g" $$CONF_FILE
           fi
+        else          
+            sed -i '/^replica-priority/d' $$CONF_FILE          
         fi
 
         redis-server $$CONF_FILE
     restart: always
     ports:
       - ${CLUSTER_NODE_IP}:6380:6380
+      - ${CLUSTER_NODE_IPW}:6380:6380
     deploy:
       mode: replicated
       replicas: 1
@@ -258,12 +268,11 @@ services:
         echo "sentinel parallel-syncs redis 1" >> $$CONF_FILE
         else
         sed -i "s#^sentinel announce-ip.*#sentinel announce-ip ${CLUSTER_NODE_IP}#g" $$CONF_FILE
-        sed -i "s#^sentinel monitor redis.*#sentinel monitor redis ${CLUSTER_REDIS_INTEL_MASTER} 6380 ${CLUSTER_REDIS_INTEL_QUORUM}#g" $$CONF_FILE
         sed -i "s#^sentinel auth-pass redis.*#sentinel auth-pass redis ${REDIS_INTEL_PASS}#g" $$CONF_FILE
         fi
 
-        redis_master=${CLUSTER_REDIS_MASTER}
-        if [ ! -z "$${redis_master}" ];then
+        redis_master="${CLUSTER_NODE_PEERS}"
+        if [[ ! -z $${redis_master} ]] && [[ ${REDIS_HOST} == "redis"* ]];then
           echo "starting sentinel"
           redis-server $$CONF_FILE --sentinel
         else
@@ -331,7 +340,7 @@ services:
 
         done
 
-        redis_master=${CLUSTER_REDIS_INTEL_MASTER}
+        redis_master="${CLUSTER_NODE_PEERS}"
         if [ true ] || [ ! -z "$$redis_master" ];then
          echo "starting redis-intel-ha"
          haproxy  -f haproxy.cfg
@@ -396,6 +405,7 @@ services:
       driver: local
     profiles:
       - master
+      - worker
 
   es:
     image: elasticsearch:8.5.0
@@ -417,6 +427,7 @@ services:
           - Ferrum_Node=management
     ports:
       - ${CLUSTER_NODE_IP}:9200:9200
+      - ${CLUSTER_NODE_IPW}:9200:9200
     mem_limit: 2073741824
     ulimits:
       memlock:

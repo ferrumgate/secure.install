@@ -1,6 +1,5 @@
 #!/bin/bash
-TRUE=0
-FALSE=1
+# shellcheck disable=SC2022,SC2155
 
 ### log functions
 
@@ -121,7 +120,7 @@ status_service() {
 ETC_DIR=/etc/ferrumgate
 
 uninstall() {
-    read -p -r "are you sure [Yn] " yesno
+    read -r -p "are you sure [Yn] " yesno
     if [ "$yesno" = "Y" ]; then
 
         info "uninstall started"
@@ -157,9 +156,10 @@ is_gateway_yaml() {
 }
 
 find_default_gateway() {
-    for file in $(ls $ETC_DIR); do
+    for file in "$ETC_DIR"/*; do
+        file=$(basename "$file")
         local result=$(is_gateway_yaml "$file")
-        if [ ! -z "$result" ]; then
+        if [ -n "$result" ]; then
             local gatewayId=$(echo "$file" | sed -e "s/gateway.//" -e "s/.yaml//")
             echo "$gatewayId"
             break
@@ -213,9 +213,10 @@ logs() {
 
 list_gateways() {
 
-    for file in $(ls $ETC_DIR); do
+    for file in "$ETC_DIR"/*; do
+        file=$(basename "$file")
         local result=$(is_gateway_yaml "$file")
-        if [ ! -z "$result" ]; then
+        if [ -n "$result" ]; then
 
             local gatewayId=$(echo "$file" | sed -e "s/gateway.//" -e "s/.yaml//")
 
@@ -241,7 +242,7 @@ create_gateway() {
     local port=$1
     local gateway_id=$2
     if [ -z "$port" ]; then
-        read -p -r "enter a port for ssh tunnel server: " p1
+        read -r -p "enter a port for ssh tunnel server: " p1
         port=$p1
     fi
     ## this must be lowercase , we are using with docker compose -p
@@ -259,9 +260,9 @@ create_gateway() {
 }
 
 recreate_gateway() {
-    read -p -r "enter a port for ssh tunnel server: " port
+    read -r -p "enter a port for ssh tunnel server: " port
     ## this must be lowercase , we are using with docker compose -p
-    read -p -r "enter gateway id:" gateway_id
+    read -r -p "enter gateway id:" gateway_id
     create_gateway "$port" "$gateway_id"
 }
 
@@ -324,12 +325,13 @@ start_gateway() {
         #sed -i "s|external:.*|external: false|g" $FILE
         yq -yi ".services.\"server-quic\".extra_hosts[0] |= \"registry.ferrumgate.zero:192.168.88.40\"" "$FILE"
         local peers=$(get_config CLUSTER_NODE_PEERSW)
-        if [ ! -z "$peers" ]; then
+        if [ -n "$peers" ]; then
             local tmp=$(echo "$peers" | cut -d'=' -f2-)
             local ip=$(echo "$tmp" | cut -d'/' -f3)
             yq -yi ".services.\"server-quic\".extra_hosts[1] |= \"redis-ha:$ip\"" "$FILE"
-            yq -yi ".services.\"server-quic\".extra_hosts[2] |= \"redis-local:$ip\"" "$FILE"
+            yq -yi ".services.\"server-quic\".extra_hosts[1] |= \"redis:$ip\"" "$FILE"
             yq -yi ".services.\"server-quic\".extra_hosts[3] |= \"es-ha:$ip\"" "$FILE"
+            yq -yi ".services.\"server-quic\".extra_hosts[3] |= \"es:$ip\"" "$FILE"
             yq -yi ".services.\"server-quic\".extra_hosts[4] |= \"log:$ip\"" "$FILE"
         fi
 
@@ -345,7 +347,7 @@ prepare_env() {
     # prepare redis
     local redis_host=$(get_config REDIS_HOST)
     local redis_ha_host=$(get_config REDIS_HA_HOST)
-    local is_redis_clustered=$(get_config CLUSTER_REDIS_MASTER)
+    local is_redis_clustered=$(get_config CLUSTER_NODE_PEERS)
     if [ -z "$is_redis_clustered" ]; then
         info "redis is not clustered"
         set_config REDIS_PROXY_HOST "$redis_host"
@@ -362,7 +364,7 @@ prepare_env() {
     # prepare redis intel
     local redis_intel_host=$(get_config REDIS_INTEL_HOST)
     local redis_intel_ha_host=$(get_config REDIS_INTEL_HA_HOST)
-    local is_redis_intel_clustered=$(get_config CLUSTER_REDIS_INTEL_MASTER)
+    local is_redis_intel_clustered=$(get_config CLUSTER_NODE_PEERS)
     if [ -z "$is_redis_intel_clustered" ]; then
         info "redis intel is not clustered"
         set_config REDIS_INTEL_PROXY_HOST "$redis_intel_host"
@@ -399,9 +401,10 @@ start_base_and_gateways() {
 
     start_base
 
-    for file in $(ls $ETC_DIR); do
+    for file in "$ETC_DIR"/*; do
+        file=$(basename "$file")
         local result=$(is_gateway_yaml "$file")
-        if [ ! -z "$result" ]; then
+        if [ -n "$result" ]; then
             local gatewayId=$(echo "$file" | sed -e "s/gateway.//" -e "s/.yaml//")
             start_gateway "$gatewayId"
         fi
@@ -423,9 +426,10 @@ stop_gateway() {
 
 stop_base_and_gateways() {
 
-    for file in $(ls $ETC_DIR); do
+    for file in "$ETC_DIR"/*; do
+        file=$(basename "$file")
         local result=$(is_gateway_yaml "$file")
-        if [ ! -z "$result" ]; then
+        if [ -n "$result" ]; then
 
             local gatewayId=$(echo "$file" | sed -e "s/gateway.//" -e "s/.yaml//")
             stop_gateway "$gatewayId"
@@ -795,19 +799,19 @@ remove_cluster_peer() {
 set_cluster_config() {
     show_cluster_info
     echo "which option do you want to change?"
-    read -p -r "type host, ip, port, key: " selection
+    read -r -p "type host, ip, port, key: " selection
 
     if [ "$selection" = "host" ]; then
-        read -p -r "enter hostname: " hostname
-        read -p -r "are you sure [Yn] " yesno
+        read -r -p "enter hostname: " hostname
+        read -r -p "are you sure [Yn] " yesno
         if [ "$yesno" = "Y" ]; then
             set_config CLUSTER_NODE_HOST "$hostname"
             info "cluster host changed"
         fi
     fi
     if [ "$selection" = "ip" ]; then
-        read -p -r "enter ip: " ip
-        read -p -r "are you sure [Yn] " yesno
+        read -r -p "enter ip: " ip
+        read -r -p "are you sure [Yn] " yesno
         if [ "$yesno" = "Y" ]; then
             set_config CLUSTER_NODE_IP "$ip"
             info "cluster ip changed"
@@ -815,8 +819,8 @@ set_cluster_config() {
     fi
 
     if [ "$selection" = "port" ]; then
-        read -p -r "enter port: " port
-        read -p -r "are you sure [Yn] " yesno
+        read -r -p "enter port: " port
+        read -r -p "are you sure [Yn] " yesno
         if [ "$yesno" = "Y" ]; then
             set_config CLUSTER_NODE_PORT "$port"
             info "cluster port changed"
@@ -824,7 +828,7 @@ set_cluster_config() {
     fi
 
     if [ "$selection" = "key" ]; then
-        read -p -r "are you sure [Yn] " yesno
+        read -r -p "are you sure [Yn] " yesno
         if [ "$yesno" = "Y" ]; then
             recreate_cluster_keys
             info "cluster keys changed"
@@ -902,7 +906,7 @@ show_config_all() {
     cat /etc/ferrumgate/env
     echo "**********************************************"
     # shellcheck disable=SC2022
-    echo "ferrumgate --set-config-all \"$(cat /etc/ferrumgate/env | base64 -w 0)\""
+    echo "ferrumgate --set-config-all $(cat /etc/ferrumgate/env | base64 -w 0)"
 }
 ##
 ## if you change this funnction
@@ -958,54 +962,104 @@ set_config_all() {
 
 }
 
+is_redis_master_role() {
+    local redis_host="$1"
+    local redis_port="$2"
+    local redis_pass="$3"
+    local result=$(docker run redis:7-bullseye redis-cli --no-auth-warning -h "$redis_host" -p "$redis_port" --pass "$redis_pass" role)
+    result=$(echo "$result" | grep "master" | wc -l)
+    if [ "$result" != 0 ]; then
+        echo "yes"
+    else
+        echo "no"
+    fi
+}
+
 create_redis_cluster() {
     if [ $# -lt 1 ]; then
         error "no arguments supplied"
         exit 1
     fi
+    info "creating redis cluster"
 
     local redis_pass=$(get_config REDIS_PASS)
+    local redis_intel_pass=$(get_config REDIS_INTEL_PASS)
     local node_host=$(get_config CLUSTER_NODE_HOST)
     local node_ip=$(get_config CLUSTER_NODE_IP)
     counter=0
-    local peers=$1
-    local master_host=
-    local master_ip=
+    local peers="$1"
+    local redis_master_host=
+    local redis_master_ip=
+    local redis_intel_master_host=
+    local redis_intel_master_ip=
+
     # find master host and ip
     for line in $(echo "$peers" | tr " " "\n"); do
         counter=$((counter + 1))
-        local data=$(echo "$line" | cut -d'=' -f2)
-        peer_host=$(echo "$data" | cut -d'/' -f1)
-        peer_ip=$(echo "$data" | cut -d'/' -f3)
-        if [ $counter -eq 1 ]; then
-            master_host=$peer_host
-            master_ip=$peer_ip
+        local peer=$(echo "$line" | cut -d'=' -f1)
+        if [ "$peer" = "PEER" ]; then
+
+            local data=$(echo "$line" | cut -d'=' -f2)
+            peer_host=$(echo "$data" | cut -d'/' -f1)
+            peer_ip=$(echo "$data" | cut -d'/' -f3)
+            info "checking is redis master $peer_ip:6379"
+            local is_master=$(is_redis_master_role "$peer_ip" 6379 "$redis_pass")
+            if [[ "$is_master" = "yes" ]] && [[ -z $redis_master_host ]]; then
+                redis_master_host=$peer_host
+                redis_master_ip=$peer_ip
+                set_config CLUSTER_REDIS_MASTER "$peer_ip"
+                info "redis master found $peer_ip:6379"
+            fi
+
+            info "checking is redis master $peer_ip:6380"
+            local is_master=$(is_redis_master_role "$peer_ip" 6380 "$redis_pass")
+            if [[ "$is_master" = "yes" ]] && [[ -z $redis_intel_master_host ]]; then
+                redis_intel_master_host=$peer_host
+                redis_intel_master_ip=$peer_ip
+                set_config CLUSTER_REDIS_INTEL_MASTER "$peer_ip"
+                info "redis intel master found $peer_ip:6380"
+            fi
+
         fi
+
     done
 
-    set_config CLUSTER_REDIS_MASTER "$master_ip"
-    set_config CLUSTER_REDIS_INTEL_MASTER "$master_ip"
+    if [ -z "$redis_master_host" ]; then
+        error "redis master not found"
+        return
+    fi
 
-    if [ "$node_host" != "$master_host" ]; then # this is not master machine
+    if [ -z "$redis_intel_master_host" ]; then
+        error "redis intel master not found"
+        return
+    fi
+
+    if [ "$node_ip" != "$redis_master_ip" ]; then # this is not master machine
         info "creating redis cluster"
         ## prepare redis
         local port=6379
-        docker run redis:7-bullseye redis-cli --no-auth-warning -h "$node_ip" -p "$port" --pass "$redis_pass" replicaof "$master_ip $port"
+        docker run redis:7-bullseye redis-cli --no-auth-warning -h "$node_ip" -p "$port" --pass "$redis_pass" replicaof "$redis_master_ip" "$port"
         docker run redis:7-bullseye redis-cli --no-auth-warning -h "$node_ip" -p "$port" --pass "$redis_pass" config rewrite
-        port=6380
-        docker run redis:7-bullseye redis-cli --no-auth-warning -h "$node_ip" -p "$port" --pass "$redis_pass" replicaof "$master_ip $port"
+
+    fi
+    if [ "$node_ip" != "$redis_intel_master_ip" ]; then # this is not master machine
+        info "creating redis intel cluster"
+        ## prepare intel redis
+        local port=6380
+        docker run redis:7-bullseye redis-cli --no-auth-warning -h "$node_ip" -p "$port" --pass "$redis_pass" replicaof "$redis_intel_master_ip" "$port"
         docker run redis:7-bullseye redis-cli --no-auth-warning -h "$node_ip" -p "$port" --pass "$redis_pass" config rewrite
     fi
 
 }
 
 create_cluster() {
-    read -p -r "do you want to continue [Yn] " yesno
+    read -r -p "do you want to continue [Yn] " yesno
     if [ "$yesno" = "Y" ]; then
         echo "paste peers and ctrl-d when done:"
         local peers=$(cat)
         set_config CLUSTER_NODE_PEERS ""
         set_config CLUSTER_ES_PEERS ""
+
         for line in $(echo "$peers" | tr " " "\n"); do
             local peer=$(echo "$line" | cut -d'=' -f1)
             if [ "$peer" = "PEER" ]; then
@@ -1032,7 +1086,7 @@ cluster_add_worker() {
         return
     fi
 
-    read -p -r "do you want to continue [Yn] " yesno
+    read -r -p "do you want to continue [Yn] " yesno
     if [ "$yesno" = "Y" ]; then
         echo "paste peers and ctrl-d when done:"
         local saved_peers=$(get_config CLUSTER_NODE_PEERSW)
@@ -1066,7 +1120,7 @@ cluster_join() {
     fi
     local peers=""
     if [ $# -lt 1 ]; then
-        read -p -r "do you want to continue [Yn] " yesno
+        read -r -p "do you want to continue [Yn] " yesno
         if [ "$yesno" != "Y" ]; then
             return
         fi
@@ -1360,7 +1414,7 @@ main() {
             opt=39
             shift
             # shellcheck disable=SC2236
-            if [ ! -z "$3" ]; then
+            if [ -n "$3" ]; then
                 parameter_name="$3"
                 shift
             fi
@@ -1451,4 +1505,4 @@ main() {
 
 }
 
-main "$*"
+main "$@"
