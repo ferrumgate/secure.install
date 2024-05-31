@@ -512,7 +512,6 @@ services:
       driver: local
     profiles:
       - master
-      - worker
   
   ui:
     image: "??PRIVATE_REGISTRY/ferrumgate/ui.portal:2.0.0"
@@ -599,8 +598,10 @@ services:
       - MODULE_DEVICE_TO_ES=false
       - MODULE_ACTIVITY_SVC_PARSER=false
     ports:
-      - ${CLUSTER_NODE_IP}:9292:9292
-      - ${CLUSTER_NODE_IPW}:9292:9292
+      - ${CLUSTER_NODE_IP}:9292:9292/udp
+      - ${CLUSTER_NODE_IP}:9292:9292/tcp
+      - ${CLUSTER_NODE_IPW}:9292:9292/udp
+      - ${CLUSTER_NODE_IPW}:9292:9292/tcp
     deploy:
       mode: replicated
       replicas: ${LOG_REPLICAS}
@@ -714,13 +715,15 @@ services:
       - FERRUM_CLOUD_URL=${FERRUM_CLOUD_URL}
       - FERRUM_CLOUD_TOKEN=${FERRUM_CLOUD_TOKEN}
       - MODULE_NODE=true
+    extra_hosts:
+      - "registry.ferrumgate.zero:192.168.88.40"
     deploy:
       mode: global
       restart_policy:
         delay: 5s
     networks:
       - ferrum
-    depends_on:
+    depends_on: # ferrumgate.sh will add and remove them
       - redis-ha
     logging:
       driver: local

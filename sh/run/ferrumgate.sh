@@ -88,6 +88,7 @@ print_usage() {
     echo "  ferrumgate [ --show-config-all ] show all config"
     echo "  ferrumgate [ --cluster-add-worker ] add a worker to cluster"
     echo "  ferrumgate [ --cluster-join ] join to a cluster"
+    echo "  ferrumgate [ --remove-worker ] remove a worker from cluster"
     echo "  ferrumgate [ --regenerate-cluster-keys ] regenerate cluster keys"
 
 }
@@ -301,6 +302,29 @@ get_docker_profile() {
 start_base() {
     info "starting base"
 
+    local FILE="$ETC_DIR/base.yaml"
+    # just worker node
+    if [ "$(is_worker_host)" = "yes" ] && [ "$(is_master_host)" = "no" ]; then
+        info "this is a worker node"
+        #sed -i "s|external:.*|external: false|g" $FILE
+        yq -yi ".services.node.extra_hosts[0] |= \"registry.ferrumgate.zero:192.168.88.40\"" "$FILE"
+        local peers=$(get_config CLUSTER_NODE_PEERSW)
+        if [ -n "$peers" ]; then
+            local tmp=$(echo "$peers" | cut -d'=' -f2-)
+            local ip=$(echo "$tmp" | cut -d'/' -f3)
+            yq -yi ".services.node.extra_hosts[1] |= \"redis-ha:$ip\"" "$FILE"
+            yq -yi ".services.node.extra_hosts[2] |= \"redis:$ip\"" "$FILE"
+            yq -yi ".services.node.extra_hosts[3] |= \"log:$ip\"" "$FILE"
+        fi
+
+        yq -yi "del(.services.node.depends_on)" "$FILE"
+
+    else
+        #sed -i "s|external:.*|external: true|g" $FILE
+        yq -yi ".services.node.extra_hosts[0] |= \"registry.ferrumgate.zero:192.168.88.40\"" "$FILE"
+        yq -yi ".services.node.depends_on[0] |= \"redis-ha\"" "$FILE"
+    fi
+
     docker compose -f "$ETC_DIR/base.yaml" --env-file "$ETC_DIR/env" \
         $(get_docker_profile) -p fg-base up -d --remove-orphans
 }
@@ -329,10 +353,10 @@ start_gateway() {
             local tmp=$(echo "$peers" | cut -d'=' -f2-)
             local ip=$(echo "$tmp" | cut -d'/' -f3)
             yq -yi ".services.\"server-quic\".extra_hosts[1] |= \"redis-ha:$ip\"" "$FILE"
-            yq -yi ".services.\"server-quic\".extra_hosts[1] |= \"redis:$ip\"" "$FILE"
+            yq -yi ".services.\"server-quic\".extra_hosts[2] |= \"redis:$ip\"" "$FILE"
             yq -yi ".services.\"server-quic\".extra_hosts[3] |= \"es-ha:$ip\"" "$FILE"
-            yq -yi ".services.\"server-quic\".extra_hosts[3] |= \"es:$ip\"" "$FILE"
-            yq -yi ".services.\"server-quic\".extra_hosts[4] |= \"log:$ip\"" "$FILE"
+            yq -yi ".services.\"server-quic\".extra_hosts[4] |= \"es:$ip\"" "$FILE"
+            yq -yi ".services.\"server-quic\".extra_hosts[5] |= \"log:$ip\"" "$FILE"
         fi
 
     else
@@ -384,9 +408,9 @@ prepare_env() {
 
     if [ "$(is_master_host)" = "no" ] && [ "$(is_worker_host)" = "yes" ]; then
         #if this is a worker host
-        set_config ES_PROXY_HOST "$es_ha_host"
-        set_config REDIS_PROXY_HOST "$redis_ha_host"
-        local redis_host_ssh=$(echo "$redis_ha_host" | sed 's/:/#/g')
+        set_config ES_PROXY_HOST "$es_host"
+        set_config REDIS_PROXY_HOST "$redis_host"
+        local redis_host_ssh=$(echo "$redis_host" | sed 's/:/#/g')
         set_config REDIS_HOST_SSH "$redis_host_ssh"
 
     fi
@@ -524,10 +548,10 @@ cluster_info() {
 }
 is_cluster_working() {
     local count=$(ip a | grep wgferrum | wc -l)
-    if [ ! "$count" -eq "0" ]; then
-        echo "yes"
-    else
+    if [ "$count" -eq "0" ]; then
         echo "no"
+    else
+        echo "yes"
     fi
 }
 
@@ -546,6 +570,22 @@ stop_cluster() {
     ip link del dev wgferrumw 2>/dev/null || true
 
     info "stopped cluster"
+    stop_firewall
+    info "firewall rules cleared"
+}
+stop_firewall() {
+    firewall_rules_count=$(iptables -S INPUT | grep wgferrum | wc -l)
+    for _i in $(seq 1 "$firewall_rules_count"); do
+        iptables -D INPUT -i wgferrum+ ! -d 169.254.0.0/16 -j DROP || true
+    done
+
+}
+start_firewall() {
+    stop_firewall
+    firewall_rules_count=$(iptables -S INPUT | grep wgferrum | wc -l)
+    if [ "$firewall_rules_count" -eq "0" ]; then
+        iptables -A INPUT -i wgferrum+ ! -d 169.254.0.0/16 -j DROP
+    fi
 }
 
 start_cluster() {
@@ -610,7 +650,8 @@ start_cluster() {
     wg-quick up wgferrumw
 
     info "started cluster"
-
+    start_firewall
+    info "firewal rules applied"
 }
 
 status_cluster() {
@@ -1109,6 +1150,41 @@ cluster_add_worker() {
     fi
 }
 
+cluster_remove_worker() {
+    if [ "$(is_master_host)" = "no" ]; then
+        error "only master can add worker"
+        info "ferrumgate --upgrade-to-master"
+        return
+    fi
+
+    read -r -p "do you want to continue [Yn] " yesno
+    if [ "$yesno" = "Y" ]; then
+        echo "paste hostname, or ip and ctrl-d when done:"
+        local saved_peers=$(get_config CLUSTER_NODE_PEERSW)
+        local input=$(cat)
+        local output=""
+        set_config CLUSTER_NODE_PEERSW ""
+        for line in $(echo "$saved_peers" | tr " " "\n"); do
+
+            local host=$(echo "$line" | cut -d'/' -f1)
+            local ip_public=$(echo "$line" | cut -d'/' -f2 | cut -d':' -f1)
+            local ipw=$(echo "$line" | cut -d'/' -f3)
+
+            if [ "$input" != "$host" ] && [ "$input" != "$ip_public" ] && [ "$input" != "$ipw" ]; then
+                if [ -z "$output" ]; then
+                    output="$line"
+                else
+                    output="$output $line"
+                fi
+            fi
+
+        done
+        set_config CLUSTER_NODE_PEERSW "$output"
+        start_cluster
+    fi
+
+}
+
 cluster_join() {
 
     if [ "$(is_worker_host)" = "yes" ] && [ "$(is_master_host)" = "no" ]; then
@@ -1119,7 +1195,7 @@ cluster_join() {
         return
     fi
     local peers=""
-    if [ $# -lt 1 ]; then
+    if [[ $# -lt 1 ]] || [[ -z $1 ]]; then
         read -r -p "do you want to continue [Yn] " yesno
         if [ "$yesno" != "Y" ]; then
             return
@@ -1209,6 +1285,7 @@ main() {
     create-cluster,\
     update-cluster,\
     cluster-add-worker,\
+    cluster-remove-worker,\
     cluster-join::,\
     regenerate-cluster-keys,\
     get-cluster-config-public-peer,\
@@ -1445,6 +1522,11 @@ main() {
             shift
             break
             ;;
+        --cluster-remove-worker)
+            opt=45
+            shift
+            break
+            ;;
         --)
             shift
             break
@@ -1502,6 +1584,7 @@ main() {
     [ $opt -eq 42 ] && regenerate_cluster_ips && exit 0
     [ $opt -eq 43 ] && get_cluster_config_public_peer && exit 0
     [ $opt -eq 44 ] && update_cluster && exit 0
+    [ $opt -eq 45 ] && cluster_remove_worker && exit 0
 
 }
 
