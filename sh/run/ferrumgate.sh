@@ -412,7 +412,6 @@ prepare_env() {
         set_config REDIS_PROXY_HOST "$redis_host"
         local redis_host_ssh=$(echo "$redis_host" | sed 's/:/#/g')
         set_config REDIS_HOST_SSH "$redis_host_ssh"
-
     fi
 }
 
