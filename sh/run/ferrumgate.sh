@@ -780,6 +780,20 @@ get_cluster_config_public_peer() {
     fi
 }
 
+check_peer_ip_exits() {
+    local peers="$1"
+    local search_ip="$2"
+
+    for line in $(echo "$peers" | tr " " "\n"); do
+        local peer=$(echo "$line" | cut -d'=' -f1)
+        local tmp=$(echo "$line" | cut -d'=' -f2-)
+        if [[ "$tmp" = *"/$search_ip/"* ]]; then
+            echo "$search_ip"
+            return
+        fi
+    done
+}
+
 add_cluster_peer() {
     if [ $# -lt 1 ]; then
         error "no arguments supplied"
@@ -1131,6 +1145,21 @@ cluster_add_worker() {
         echo "paste peers and ctrl-d when done:"
         local saved_peers=$(get_config CLUSTER_NODE_PEERSW)
         local peers=$(cat)
+        #check if ip exits
+        local node_ip=$(get_config CLUSTER_NODE_IP)
+        local node_ipw=$(get_config CLUSTER_NODE_IPW)
+
+        if [ -n "$(check_peer_ip_exits "$peers" "$node_ip")" ]; then
+            error "$node_ip on this machine already exists, please change it at worker"
+            warn "ferrumgate --set-config CLUSTER_NODE_IP=\$IP"
+            return
+        fi
+        if [ -n "$(check_peer_ip_exits "$peers" "$node_ipw")" ]; then
+            error "$node_ipw on this machine already exists, please change it at worker"
+            warn "ferrumgate --set-config CLUSTER_NODE_IPW=\$IP"
+            return
+        fi
+
         set_config CLUSTER_NODE_PEERSW ""
         for line in $(echo "$peers" | tr " " "\n"); do
             local peer=$(echo "$line" | cut -d'=' -f1)
@@ -1205,6 +1234,22 @@ cluster_join() {
         peers=$1
     fi
 
+    #check if ip exits
+    local node_ip=$(get_config CLUSTER_NODE_IP)
+    local node_ipw=$(get_config CLUSTER_NODE_IPW)
+
+    if [ -n "$(check_peer_ip_exits "$peers" "$node_ip")" ]; then
+        error "$node_ip on this machine already exists, please change it here"
+        warn "ferrumgate --set-config CLUSTER_NODE_IP=\$IP"
+        return
+    fi
+    if [ -n "$(check_peer_ip_exits "$peers" "$node_ipw")" ]; then
+        error "$node_ipw on this machine already exists, please change it here"
+        warn "ferrumgate --set-config CLUSTER_NODE_IPW=\$IP"
+        return
+    fi
+
+    # set variables
     set_config CLUSTER_NODE_PEERSW ""
     for line in $(echo "$peers" | tr " " "\n"); do
         local peer=$(echo "$line" | cut -d'=' -f1)
