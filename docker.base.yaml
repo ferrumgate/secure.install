@@ -155,7 +155,8 @@ services:
         done
 
         redis_master="${CLUSTER_NODE_PEERS}"
-        if [ ! -z "$$redis_master" ];then
+        ferrum_cloud_id="${FERRUM_CLOUD_ID}"
+        if [ -z "$$ferrum_cloud_id" ] || [ ! -z "$$redis_master" ];then
          echo "starting redis-ha"
          haproxy  -f haproxy.cfg
         else 
@@ -339,7 +340,8 @@ services:
         done
 
         redis_master="${CLUSTER_NODE_PEERS}"
-        if [ ! -z "$$redis_master" ];then
+        ferrum_cloud_id="${FERRUM_CLOUD_ID}"
+        if [ -z "$$ferrum_cloud_id" ] || [ ! -z "$$redis_master" ];then
          echo "starting redis-intel-ha"
          haproxy  -f haproxy.cfg
         else 
@@ -407,6 +409,17 @@ services:
 
   es:
     image: elasticsearch:8.5.0
+    command:
+      - /bin/bash
+      - -c
+      - |
+        ferrum_cloud_id="${FERRUM_CLOUD_ID}"
+        if [ -z "$$ferrum_cloud_id" ];then
+          /bin/tini -- /usr/local/bin/docker-entrypoint.sh
+        else
+          echo "ferrum cloud id exists, closing es"
+          exit 1
+        fi
     restart: always
     environment:
       - ES_JAVA_OPTS=-Xms128m -Xmx1g
@@ -439,6 +452,47 @@ services:
       driver: local
     profiles:
       - master
+
+  es-proxy:
+    image: "??PRIVATE_REGISTRY/ferrumgate/secure.es.proxy:1.0.0"
+    restart: always
+      - /bin/bash
+      - -c
+      - |
+        ferrum_cloud_id="${FERRUM_CLOUD_ID}"
+        if [ -z "$$ferrum_cloud_id" ];then
+          echo "ferrum cloud id exists, closing es"
+          exit 1
+        else
+          npm run startdocker
+        fi
+    environment:
+      - ROLES=${ROLES}
+      - ES_HOST=${ES_PROXY_HOST}
+      - ES_USER=${ES_USER}
+      - ES_PASS=${ES_PASS}
+      - FERRUM_CLOUD_ID=${FERRUM_CLOUD_ID}
+      - FERRUM_CLOUD_URL=${FERRUM_CLOUD_URL}
+      - FERRUM_CLOUD_TOKEN=${FERRUM_CLOUD_TOKEN}
+      - FERRUM_ES_HOST=${ES_PROXY_HOST}
+      - FERRUM_ES_USER=${ES_USER}
+      - FERRUM_ES_PASS=${ES_PASS}
+    extra_hosts:
+      - "registry.ferrumgate.zero:192.168.88.40"
+    deploy:
+      mode: global
+      restart_policy:
+        delay: 5s
+    ports:
+      - ${CLUSTER_NODE_IP}:9200:9200
+      - ${CLUSTER_NODE_IPW}:9200:9200
+    networks:
+      - ferrum
+    logging:
+      driver: local
+    profiles:
+      - master
+
 
   es-ha:
     image: haproxy:2.8.1-bullseye

@@ -47,6 +47,7 @@ escape_dq() {
     printf '%s' "$@" | sed -e 's/"/\\"/g'
 }
 
+# shellcheck disable=SC2125
 VERSION=??VERSION
 
 print_usage() {
@@ -325,6 +326,7 @@ start_base() {
         yq -yi ".services.node.depends_on[0] |= \"redis-ha\"" "$FILE"
     fi
 
+    # shellcheck disable=SC2046
     docker compose -f "$ETC_DIR/base.yaml" --env-file "$ETC_DIR/env" \
         $(get_docker_profile) -p fg-base up -d --remove-orphans
 }
@@ -363,6 +365,7 @@ start_gateway() {
         #sed -i "s|external:.*|external: true|g" $FILE
         yq -yi ".services.\"server-quic\".extra_hosts[0] |= \"registry.ferrumgate.zero:192.168.88.40\"" "$FILE"
     fi
+    # shellcheck disable=SC2046
     docker compose -f "$FILE" --env-file "$ETC_DIR/env" \
         $(get_docker_profile) -p "fg-$gatewayId" up -d --remove-orphans
 }
@@ -408,10 +411,18 @@ prepare_env() {
 
     if [ "$(is_master_host)" = "no" ] && [ "$(is_worker_host)" = "yes" ]; then
         #if this is a worker host
-        set_config ES_PROXY_HOST "$es_host"
-        set_config REDIS_PROXY_HOST "$redis_host"
-        local redis_host_ssh=$(echo "$redis_host" | sed 's/:/#/g')
-        set_config REDIS_HOST_SSH "$redis_host_ssh"
+        local ferrum_cloud_id=$(get_config FERRUM_CLOUD_ID)
+        if [ -n "$ferrum_cloud_id" ]; then #if ferrum cloud is working
+            set_config ES_PROXY_HOST "$es_host"
+            set_config REDIS_PROXY_HOST "$redis_host"
+            local redis_host_ssh=$(echo "$redis_host" | sed 's/:/#/g')
+            set_config REDIS_HOST_SSH "$redis_host_ssh"
+        else
+            set_config ES_PROXY_HOST "$es_ha_host"
+            set_config REDIS_PROXY_HOST "$redis_ha_host"
+            local redis_host_ssh=$(echo "$redis_ha_host" | sed 's/:/#/g')
+            set_config REDIS_HOST_SSH "$redis_host_ssh"
+        fi
     fi
 }
 
@@ -527,6 +538,7 @@ change_config() {
 
 }
 all_logs() {
+    # shellcheck disable=SC2046
     docker ps -q | xargs -L 1 -P $(docker ps | wc -l) docker logs --since 30s -f
 }
 
@@ -573,18 +585,22 @@ stop_cluster() {
     info "firewall rules cleared"
 }
 stop_firewall() {
-    firewall_rules_count=$(iptables -S INPUT | grep wgferrum | wc -l)
-    for _i in $(seq 1 "$firewall_rules_count"); do
-        iptables -D INPUT -i wgferrum+ ! -d 169.254.0.0/16 -j DROP || true
-    done
+
+    while read -r rule; do
+        rule_replaced="${rule/-A/-D}"
+        # shellcheck disable=SC2086
+        iptables $rule_replaced
+    done <<<"$(iptables -S INPUT | grep wgferrum)"
 
 }
 start_firewall() {
     stop_firewall
-    firewall_rules_count=$(iptables -S INPUT | grep wgferrum | wc -l)
-    if [ "$firewall_rules_count" -eq "0" ]; then
-        iptables -A INPUT -i wgferrum+ ! -d 169.254.0.0/16 -j DROP
-    fi
+
+    iptables -A INPUT -i wgferrum+ ! -d 169.254.0.0/16 -j DROP
+    local ports="6379,6380,7379,7380,9292"
+    #give permission only to redis,redis-ha,redis-intel,redis-intel-ha,log
+    #iptables -A INPUT -p tcp -i wgferrum+ ! -d 169.254.0.0/16 -m multiport --dports $ports -j DROP
+    #iptables -A INPUT -p udp -i wgferrum+ ! -d 169.254.0.0/16 -m multiport --dports $ports -j DROP
 }
 
 start_cluster() {
