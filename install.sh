@@ -499,6 +499,21 @@ main() {
             FERRUM_CLOUD_PORT=""
         fi
 
+        ES_MULTI_HOST=$(get_config ES_MULTI_HOST)
+        if [ -z "$ES_MULTI_HOST" ]; then
+            ES_MULTI_HOST=""
+        fi
+
+        ES_MULTI_USER=$(get_config ES_MULTI_USER)
+        if [ -z "$ES_MULTI_USER" ]; then
+            ES_MULTI_USER=""
+        fi
+
+        ES_MULTI_PASS=$(get_config ES_MULTI_PASS)
+        if [ -z "$ES_MULTI_PASS" ]; then
+            ES_MULTI_PASS=""
+        fi
+
         #SSL_FILE=$(create_certificates)
         #SSL_PUB=$(cat ${SSL_FILE}.crt | base64 -w 0)
         #SSL_KEY=$(cat ${SSL_FILE}.key | base64 -w 0)
@@ -552,6 +567,10 @@ ES_PROXY_HOST=
 ES_INTEL_HOST=$ES_INTEL_HOST
 ES_INTEL_USER=$ES_INTEL_USER
 ES_INTEL_PASS=$ES_INTEL_PASS
+ES_MULTI_HOST=$ES_MULTI_HOST
+ES_MULTI_USER=$ES_MULTI_USER
+ES_MULTI_PASS=$ES_MULTI_PASS
+ES_IMAGE=elasticsearch:8.5.0
 LOG_LEVEL=$LOG_LEVEL
 REST_HTTP_PORT=$REST_HTTP_PORT
 REST_HTTPS_PORT=$REST_HTTPS_PORT

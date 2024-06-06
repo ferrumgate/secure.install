@@ -91,6 +91,8 @@ print_usage() {
     echo "  ferrumgate [ --cluster-join ] join to a cluster"
     echo "  ferrumgate [ --remove-worker ] remove a worker from cluster"
     echo "  ferrumgate [ --regenerate-cluster-keys ] regenerate cluster keys"
+    echo "  ferrumgate [ --regenerate-cluster-ip ] regenerate cluster ip"
+    echo "  ferrumgate [ --regenerate-cluster-ipw ] regenerate cluster ipw"
 
 }
 
@@ -424,6 +426,13 @@ prepare_env() {
             set_config REDIS_HOST_SSH "$redis_host_ssh"
         fi
     fi
+
+    #if this is master host in ferrum cloud, use proxy
+    local ferrum_cloud_id=$(get_config FERRUM_CLOUD_ID)
+    set_config ES_IMAGE "elasticsearch:8.5.0"
+    if [ "$(is_master_host)" = "yes" ] && [ -n "$ferrum_cloud_id" ]; then
+        set_config ES_IMAGE "ferrumgate/secure.es.proxy:1.0.0"
+    fi
 }
 
 start_base_and_gateways() {
@@ -587,6 +596,9 @@ stop_cluster() {
 stop_firewall() {
 
     while read -r rule; do
+        if [ -z "$rule" ]; then
+            continue
+        fi
         rule_replaced="${rule/-A/-D}"
         # shellcheck disable=SC2086
         iptables $rule_replaced
@@ -597,7 +609,7 @@ start_firewall() {
     stop_firewall
 
     iptables -A INPUT -i wgferrum+ ! -d 169.254.0.0/16 -j DROP
-    local ports="6379,6380,7379,7380,9292"
+    #local ports="6379,6380,7379,7380,9292"
     #give permission only to redis,redis-ha,redis-intel,redis-intel-ha,log
     #iptables -A INPUT -p tcp -i wgferrum+ ! -d 169.254.0.0/16 -m multiport --dports $ports -j DROP
     #iptables -A INPUT -p udp -i wgferrum+ ! -d 169.254.0.0/16 -m multiport --dports $ports -j DROP
@@ -1299,12 +1311,15 @@ create_cluster_ip() {
     echo "169.254.254.$random"
 }
 
-regenerate_cluster_ips() {
+regenerate_cluster_ip() {
     local ip=$(create_cluster_ip)
     set_config CLUSTER_NODE_IP "$ip"
+    info "regenerated ip"
+}
+regenerate_cluster_ipw() {
     local ipw=$(create_cluster_ip)
     set_config CLUSTER_NODE_IPW "$ipw"
-    info "regenerated ips"
+    info "regenerated ipw"
 }
 
 main() {
@@ -1348,6 +1363,8 @@ main() {
     cluster-remove-worker,\
     cluster-join::,\
     regenerate-cluster-keys,\
+    regenerate-cluster-ip,\
+    regenerate-cluster-ipw,\
     get-cluster-config-public-peer,\
     all-logs' -- "$@") || exit
     eval set -- "$ARGS"
@@ -1567,7 +1584,7 @@ main() {
             shift
             break
             ;;
-        --regenerate-cluster-ips)
+        --regenerate-cluster-ip)
             opt=42
             shift
             break
@@ -1584,6 +1601,11 @@ main() {
             ;;
         --cluster-remove-worker)
             opt=45
+            shift
+            break
+            ;;
+        --regenerate-cluster-ipw)
+            opt=46
             shift
             break
             ;;
@@ -1641,10 +1663,11 @@ main() {
     [ $opt -eq 39 ] && cluster_join "$parameter_name" && exit 0
     [ $opt -eq 40 ] && start_cluster && exit 0
     [ $opt -eq 41 ] && regenerate_cluster_keys && exit 0
-    [ $opt -eq 42 ] && regenerate_cluster_ips && exit 0
+    [ $opt -eq 42 ] && regenerate_cluster_ip && exit 0
     [ $opt -eq 43 ] && get_cluster_config_public_peer && exit 0
     [ $opt -eq 44 ] && update_cluster && exit 0
     [ $opt -eq 45 ] && cluster_remove_worker && exit 0
+    [ $opt -eq 46 ] && regenerate_cluster_ipw && exit 0
 
 }
 
