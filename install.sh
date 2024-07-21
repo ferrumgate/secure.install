@@ -94,7 +94,7 @@ download() {
     # Abort if download command failed
     [ $? -eq 0 ] || fatal 'Download failed'
 }
-VERSION=2.0.0
+VERSION=2.1.0
 download_and_verify() {
     if [ -d "./secure.install" ]; then
         rm -rf secure.install
