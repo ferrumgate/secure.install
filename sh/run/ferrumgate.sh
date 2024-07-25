@@ -621,8 +621,76 @@ start_firewall() {
     #iptables -A INPUT -p tcp -i wgferrum+ ! -d 169.254.0.0/16 -m multiport --dports $ports -j DROP
     #iptables -A INPUT -p udp -i wgferrum+ ! -d 169.254.0.0/16 -m multiport --dports $ports -j DROP
 }
+#resolves an fqdn
+resolve_fqdn() {
+    local fqdn=$1
+    local ip=$(cat /etc/hosts | grep "$fqdn" | cut -d' ' -f1)
+    if [ -n "$ip" ]; then
+        echo "$ip"
+        return
+    fi
+    local ip=$(dig +tries=1 +short "$fqdn" | grep '^[.0-9]*$' | head -n 1)
+    echo "$ip"
+}
+# if ferrum cloud is working we need to sometimes check if ip changed
+start_try_to_resolve_cloud_ip() {
+    if [ "$(is_master_host)" = "yes" ]; then
+        return
+    fi
+    local ferrum_cloud_id=$(get_config FERRUM_CLOUD_ID)
+    if [ -z "$ferrum_cloud_id" ]; then
+        debug "cloud id not found"
+        return
+    fi
+    local ferrum_cloud_ip=$(get_config FERRUM_CLOUD_IP)
+    if [ -z "$ferrum_cloud_ip" ]; then
+        debug "cloud ip not found"
+        return
+    fi
+
+    local ferrum_cloud_port=$(get_config FERRUM_CLOUD_PORT)
+    if [ -z "$ferrum_cloud_port" ]; then
+        debug "cloud port not found"
+        return
+    fi
+
+    local cluster_node_peersw=$(get_config CLUSTER_NODE_PEERSW)
+    if [ -z "$ferrum_cloud_ip" ]; then
+        debug "cloud peers not found"
+        return
+    fi
+    local hostname=$(echo "$cluster_node_peersw" | cut -d'/' -f1)
+    local publicip=$(echo "$cluster_node_peersw" | cut -d'/' -f2 | cut -d':' -f1)
+    local privateip=$(echo "$cluster_node_peersw" | cut -d'/' -f3)
+    local key=$(echo "$cluster_node_peersw" | cut -d'/' -f4)
+
+    local fqdn=$ferrum_cloud_ip
+    local ip=""
+    local counter=0
+
+    while [ -z "$ip" ]; do
+        ip=$(resolve_fqdn "$fqdn")
+
+        if [ -n "$ip" ]; then
+            if [ "$publicip" != "$ip" ]; then
+                local new_node_peers="$hostname/$ip:$ferrum_cloud_port/$privateip/$key"
+                debug "setting cluster node peers for next release $new_node_peers"
+                set_config CLUSTER_NODE_PEERSW "$new_node_peers"
+            fi
+            break
+        fi
+        counter=$((counter + 1))
+        sleep 2
+
+        if [ $counter -eq 5 ]; then
+            break
+        fi
+    done
+
+}
 
 start_cluster() {
+    start_try_to_resolve_cloud_ip &
     stop_cluster
     local node_ip=$(get_config CLUSTER_NODE_IP)
     local node_port=$(get_config CLUSTER_NODE_PORT)
@@ -1363,11 +1431,6 @@ regenerate_cluster_ipw() {
 
 cloud_test() {
     info "testing cloud"
-}
-resolve_fqdn() {
-    local fqdn=$1
-    local ip=$(dig +short "$fqdn" 2>/dev/null)
-    echo "$ip"
 }
 
 cloud_join() {
