@@ -306,6 +306,13 @@ start_base() {
     info "starting base"
 
     local FILE="$ETC_DIR/base.yaml"
+
+    if [ -n "$FERRUM_LXD" ]; then
+        yq -yi "del(.services.es.mem_limit)" "$FILE"
+        yq -yi "del(.services.es.ulimits)" "$FILE"
+
+    fi
+
     # just worker node
     if [ "$(is_worker_host)" = "yes" ] && [ "$(is_master_host)" = "no" ]; then
         info "this is a worker node"
@@ -614,8 +621,76 @@ start_firewall() {
     #iptables -A INPUT -p tcp -i wgferrum+ ! -d 169.254.0.0/16 -m multiport --dports $ports -j DROP
     #iptables -A INPUT -p udp -i wgferrum+ ! -d 169.254.0.0/16 -m multiport --dports $ports -j DROP
 }
+#resolves an fqdn
+resolve_fqdn() {
+    local fqdn=$1
+    local ip=$(cat /etc/hosts | grep "$fqdn" | cut -d' ' -f1)
+    if [ -n "$ip" ]; then
+        echo "$ip"
+        return
+    fi
+    local ip=$(dig +tries=1 +short "$fqdn" | grep '^[.0-9]*$' | head -n 1)
+    echo "$ip"
+}
+# if ferrum cloud is working we need to sometimes check if ip changed
+start_try_to_resolve_cloud_ip() {
+    if [ "$(is_master_host)" = "yes" ]; then
+        return
+    fi
+    local ferrum_cloud_id=$(get_config FERRUM_CLOUD_ID)
+    if [ -z "$ferrum_cloud_id" ]; then
+        debug "cloud id not found"
+        return
+    fi
+    local ferrum_cloud_ip=$(get_config FERRUM_CLOUD_IP)
+    if [ -z "$ferrum_cloud_ip" ]; then
+        debug "cloud ip not found"
+        return
+    fi
+
+    local ferrum_cloud_port=$(get_config FERRUM_CLOUD_PORT)
+    if [ -z "$ferrum_cloud_port" ]; then
+        debug "cloud port not found"
+        return
+    fi
+
+    local cluster_node_peersw=$(get_config CLUSTER_NODE_PEERSW)
+    if [ -z "$ferrum_cloud_ip" ]; then
+        debug "cloud peers not found"
+        return
+    fi
+    local hostname=$(echo "$cluster_node_peersw" | cut -d'/' -f1)
+    local publicip=$(echo "$cluster_node_peersw" | cut -d'/' -f2 | cut -d':' -f1)
+    local privateip=$(echo "$cluster_node_peersw" | cut -d'/' -f3)
+    local key=$(echo "$cluster_node_peersw" | cut -d'/' -f4)
+
+    local fqdn=$ferrum_cloud_ip
+    local ip=""
+    local counter=0
+
+    while [ -z "$ip" ]; do
+        ip=$(resolve_fqdn "$fqdn")
+
+        if [ -n "$ip" ]; then
+            if [ "$publicip" != "$ip" ]; then
+                local new_node_peers="$hostname/$ip:$ferrum_cloud_port/$privateip/$key"
+                debug "setting cluster node peers for next release $new_node_peers"
+                set_config CLUSTER_NODE_PEERSW "$new_node_peers"
+            fi
+            break
+        fi
+        counter=$((counter + 1))
+        sleep 2
+
+        if [ $counter -eq 5 ]; then
+            break
+        fi
+    done
+
+}
 
 start_cluster() {
+    start_try_to_resolve_cloud_ip &
     stop_cluster
     local node_ip=$(get_config CLUSTER_NODE_IP)
     local node_port=$(get_config CLUSTER_NODE_PORT)
@@ -1002,44 +1077,57 @@ set_config_all() {
     fi
 
     local input=$(echo "$1" | base64 -d)
+    debug "set config all parameters $input"
 
     local redis_pass=$(get_config_from REDIS_PASS "$input")
     set_config REDIS_PASS "$redis_pass"
+    debug "redis pass set"
 
     local redis_intel_pass=$(get_config_from REDIS_INTEL_PASS "$input")
     set_config REDIS_INTEL_PASS "$redis_intel_pass"
+    debug "redis intel pass set"
 
     local encrypt_key=$(get_config_from ENCRYPT_KEY "$input")
     set_config ENCRYPT_KEY "$encrypt_key"
+    debug "encrypt key set"
 
     local es_pass=$(get_config_from ES_PASS "$input")
     set_config ES_PASS "$es_pass"
+    debug "es pass set"
 
     local es_intel_pass=$(get_config_from ES_INTEL_PASS "$input")
     set_config ES_INTEL_PASS "$es_intel_pass"
+    debug "es intel pass set"
 
     local ferrum_cloud_id=$(get_config_from FERRUM_CLOUD_ID "$input")
     set_config FERRUM_CLOUD_ID "$ferrum_cloud_id"
+    debug "ferrum cloud id set"
 
     local ferrum_cloud_url=$(get_config_from FERRUM_CLOUD_URL "$input")
     set_config FERRUM_CLOUD_URL "$ferrum_cloud_url"
+    debug "ferrum cloud url set"
 
     local ferrum_cloud_token=$(get_config_from FERRUM_CLOUD_TOKEN "$input")
     set_config FERRUM_CLOUD_TOKEN "$ferrum_cloud_token"
+    debug "ferrum cloud token set"
 
     if [ "$(is_master_host)" = "yes" ]; then
 
         local node_ipw=$(get_config_from CLUSTER_NODE_IPW "$input")
         set_config CLUSTER_NODE_IPW "$node_ipw"
+        debug "node ipw set"
 
         local node_portw=$(get_config_from CLUSTER_NODE_PORTW "$input")
         set_config CLUSTER_NODE_PORTW "$node_portw"
+        debug "node portw set"
 
         local node_privatekey=$(get_config_from CLUSTER_NODE_PRIVATE_KEY "$input")
         set_config CLUSTER_NODE_PRIVATE_KEY "$node_privatekey"
+        debug "node private key set"
 
         local node_publickey=$(get_config_from CLUSTER_NODE_PUBLIC_KEY "$input")
         set_config CLUSTER_NODE_PUBLIC_KEY "$node_publickey"
+        debug "node public key set"
     fi
 
 }
@@ -1206,6 +1294,25 @@ cluster_add_worker() {
     fi
 }
 
+cloud_update_workers() {
+    local peers="$1"
+    set_config CLUSTER_NODE_PEERSW ""
+    for line in $(echo "$peers" | base64 -d | tr " " "\n"); do
+        local peer=$(echo "$line" | cut -d'=' -f1)
+        if [ "$peer" = "PEERW" ]; then
+            local tmp=$(echo "$line" | cut -d'=' -f2-)
+            info "adding $tmp"
+            if [ -z "$saved_peers" ]; then
+                saved_peers="$tmp"
+            else
+                saved_peers="$saved_peers $tmp"
+            fi
+        fi
+    done
+    set_config CLUSTER_NODE_PEERSW "$saved_peers"
+    start_cluster
+}
+
 cluster_remove_worker() {
     if [ "$(is_master_host)" = "no" ]; then
         error "only master can add worker"
@@ -1322,6 +1429,223 @@ regenerate_cluster_ipw() {
     info "regenerated ipw"
 }
 
+cloud_test() {
+    info "testing cloud"
+}
+
+cloud_join() {
+    if [ $# -lt 1 ]; then
+        error "no arguments supplied"
+        exit 1
+    fi
+    info "joining to cloud"
+    local cloud_token=$(echo "$1" | base64 -d | cut -d' ' -f2)
+    local cloud_url=$(echo "$1" | base64 -d | cut -d' ' -f1)
+    local node_id=$(get_config NODE_ID)
+    local node_ip=$(get_config CLUSTER_NODE_IP)
+    local node_port=$(get_config CLUSTER_NODE_PORT)
+    local node_ipw=$(get_config CLUSTER_NODE_IPW)
+    local node_portw=$(get_config CLUSTER_NODE_PORTW)
+    local node_public_key=$(get_config CLUSTER_NODE_PUBLIC_KEY)
+    local node_host=$(get_config CLUSTER_NODE_HOST)
+    #local my_public_ip=$(curl --silent "$cloud_url/api/cloud/myip")
+    local json='{
+        "nodeId":"'"$node_id"'",
+        "nodeHost":"'"$node_host"'",
+        "nodeIp":"'"$node_ip"'",
+        "nodePort":"'"$node_port"'",
+        "nodeIpw":"'"$node_ipw"'",
+        "nodePortw":"'"$node_portw"'",
+        "nodePublicKey":"'"$node_public_key"'"
+        }'
+    debug "$json"
+
+    local bootstrap=$(curl --insecure -s -X POST "$cloud_url/api/cloud/bootstrap/start" \
+        -H "CloudToken:$cloud_token" -H "Content-Type: application/json" \
+        -d "$json")
+
+    # check if curl command failed
+    if [ $? -ne 0 ]; then
+        echo "curl command failed"
+        # Add your error handling code here
+        return
+    fi
+    # check if curl returned 200
+    local status=$(echo "$bootstrap" | jq -r '.status //empty')
+    local errorCode=$(echo "$bootstrap" | jq -r '.code //empty')
+
+    if [ -n "$status" ] && [ -n "$errorCode" ]; then
+        echo "curl failed with error code $status and error: $bootstrap"
+        # Add your error handling code here
+        return
+    fi
+    info "bootstrap started"
+
+    debug "$bootstrap"
+    local dome_id=$(echo "$bootstrap" | jq -r '.domeId //empty')
+    local dome_token=$(echo "$bootstrap" | jq -r '.domeToken //empty')
+    local dome_fqdn=$(echo "$bootstrap" | jq -r '.domeFqdn //empty')
+    local node_ip=$(echo "$bootstrap" | jq -r '.nodeIp //empty')
+    local node_port=$(echo "$bootstrap" | jq -r '.nodePort //empty')
+    local node_ipw=$(echo "$bootstrap" | jq -r '.nodeIpw //empty')
+    local node_portw=$(echo "$bootstrap" | jq -r '.nodePortw //empty')
+    local dome_config=$(echo "$bootstrap" | jq -r '.config //empty')
+    local transaction_id=$(echo "$bootstrap" | jq -r '.id //empty')
+
+    local public_ip=$(resolve_fqdn "$dome_fqdn")
+    if [ -z "$public_ip" ]; then
+        error "$dome_fqdn not resolved"
+        return
+    fi
+
+    if [ -z "$dome_id" ]; then
+        error "dome id not found"
+        return
+    fi
+
+    if [ -z "$dome_token" ]; then
+        error "dome token not found"
+        return
+    fi
+
+    if [ -z "$dome_config" ]; then
+        error "dome config not found"
+        return
+    fi
+
+    if [ -z "$dome_fqdn" ]; then
+        error "dome fqdn not found"
+        return
+    fi
+
+    if [ -z "$node_ip" ]; then
+        error "node ip not found"
+        return
+    fi
+
+    if [ -z "$node_port" ]; then
+        error "node port not found"
+        return
+    fi
+
+    if [ -z "$node_ipw" ]; then
+        error "node ipw not found"
+        return
+    fi
+
+    if [ -z "$node_portw" ]; then
+        error "node portw not found"
+        return
+    fi
+
+    if [ -z "$transaction_id" ]; then
+        error "transaction id not found"
+        return
+    fi
+    debug "returned data from cloud"
+    debug "DOME_ID=$dome_id"
+    debug "DOME_TOKEN=$dome_token"
+    debug "DOME_FQDN=$dome_fqdn"
+    debug "NODE_IP=$node_ip"
+    debug "NODE_PORT=$node_port"
+    debug "NODE_IPW=$node_ipw"
+    debug "NODE_PORTW=$node_portw"
+    debug "TRANSACTION_ID=$transaction_id"
+
+    local master_config=$(echo "$dome_config" | base64 -d)
+    local master_ipw=$(get_config_from 'CLUSTER_NODE_IPW' "$master_config")
+    local master_portw=$(get_config_from 'CLUSTER_NODE_PORTW' "$master_config")
+    local master_node_public_key=$(get_config_from 'CLUSTER_NODE_PUBLIC_KEY' "$master_config")
+    local master_node_host=$(get_config_from 'CLUSTER_NODE_HOST' "$master_config")
+
+    if [ -z "$master_ipw" ]; then
+        error "master_ipw not found"
+        return
+    fi
+    if [ -z "$master_portw" ]; then
+        error "master_portw not found"
+        return
+    fi
+    if [ -z "$master_node_public_key" ]; then
+        error "master_node_public_key not found"
+        return
+    fi
+    if [ -z "$master_node_host" ]; then
+        error "master_node_host not found"
+        return
+    fi
+
+    info "starting configuration"
+
+    #order is important
+    upgrade_to_worker
+    info "setting config all"
+    set_config_all "$dome_config"
+
+    info "customizing settings"
+    set_config NODE_IP "$node_ip"
+    set_config NODE_IPW "$node_ipw"
+    set_config NODE_PORT "$node_port"
+    set_config NODE_IPW "$node_ipw"
+    set_config FERRUM_CLOUD_ID "$dome_id"
+    set_config FERRUM_CLOUD_URL "$cloud_url"
+    set_config FERRUM_CLOUD_TOKEN "$dome_token"
+    set_config FERRUM_CLOUD_IP "$dome_fqdn"
+    set_config FERRUM_CLOUD_PORT "$master_portw"
+
+    debug "NodeIp=$node_ip"
+    debug "NodePort=$node_port"
+    debug "NodeIpw=$node_ipw"
+    debug "NodePortw=$node_portw"
+    debug "NodePublicKey=$node_public_key"
+    debug "MasterNodeHost=$master_node_host"
+    debug "MasterPublicIp=$public_ip"
+    debug "MasterIpw=$master_ipw"
+    debug "MasterPortw=$master_portw"
+    debug "MasterNodePublicKey=$master_node_public_key"
+
+    cluster_join "PEERW=$master_node_host/$public_ip:$master_portw/$master_ipw/$master_node_public_key"
+    info "prepared to cloud"
+    info "sending bootstrap end"
+    local json='{
+        "id":"'"$transaction_id"'"
+        }'
+    local bootstrap=$(curl --insecure -s -X POST "$cloud_url/api/cloud/bootstrap/end" \
+        -H "CloudToken:$cloud_token" -H "Content-Type: application/json" \
+        -d "$json")
+
+    # check if curl command failed
+    if [ $? -ne 0 ]; then
+        echo "curl command failed"
+        # Add your error handling code here
+        return
+    fi
+    # check if curl returned 200
+    local status=$(echo "$bootstrap" | jq -r '.status //empty')
+    local errorCode=$(echo "$bootstrap" | jq -r '.code //empty')
+
+    if [ -n "$status" ] && [ -n "$errorCode" ]; then
+        echo "curl failed with $bootstrap"
+        # Add your error handling code here
+        return
+    fi
+    info "bootstrap end"
+    ferrumgate --restart
+    info "cloud joined"
+    info "testing cloud"
+    ## ping 10 times success and break it
+    #counter=0
+    for i in {1..10}; do
+        info "ping $master_ipw"
+        if ping -c 1 "$master_ipw" >/dev/null; then
+            info "ping successful"
+            break
+        fi
+        sleep 1
+    done
+
+}
+
 main() {
     ensure_root
 
@@ -1366,6 +1690,9 @@ main() {
     regenerate-cluster-ip,\
     regenerate-cluster-ipw,\
     get-cluster-config-public-peer,\
+    cloud-join:,\
+    cloud-test:,\
+    cloud-update-workers:,\
     all-logs' -- "$@") || exit
     eval set -- "$ARGS"
     local service_name=''
@@ -1609,6 +1936,23 @@ main() {
             shift
             break
             ;;
+        --cloud-join)
+            opt=47
+            parameter_name="$2"
+            shift 2
+            break
+            ;;
+        --cloud-test)
+            opt=48
+            shift
+            break
+            ;;
+        --cloud-update-workers)
+            opt=49
+            parameter_name="$2"
+            shift 2
+            break
+            ;;
         --)
             shift
             break
@@ -1668,6 +2012,9 @@ main() {
     [ $opt -eq 44 ] && update_cluster && exit 0
     [ $opt -eq 45 ] && cluster_remove_worker && exit 0
     [ $opt -eq 46 ] && regenerate_cluster_ipw && exit 0
+    [ $opt -eq 47 ] && cloud_join "$parameter_name" && exit 0
+    [ $opt -eq 48 ] && cloud_test && exit 0
+    [ $opt -eq 49 ] && cloud_update_workers "$parameter_name" && exit 0
 
 }
 
