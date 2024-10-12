@@ -45,6 +45,11 @@ prerequities() {
         conntrack \
         ntp \
         yq
+    #install yq
+    #YQ_VERSION=v4.2.0
+    #YQ_BINARY=yq_linux_amd64
+    #wget -q https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/${YQ_BINARY}.tar.gz -O - |
+    #    tar xz && mv ${YQ_BINARY} /usr/bin/yq
 
     ####
     if [ -n "$FERRUM_LXD" ]; then

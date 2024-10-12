@@ -47,6 +47,10 @@ escape_dq() {
     printf '%s' "$@" | sed -e 's/"/\\"/g'
 }
 
+random() {
+    echo "$(cat /dev/urandom | tr -dc '[:alnum:]' | fold -w "$1" | head -n 1 | tr '[:upper:]' '[:lower:]')"
+}
+
 # shellcheck disable=SC2125
 VERSION=??VERSION
 
@@ -98,17 +102,26 @@ print_usage() {
 
 start_service() {
 
-    start_base_and_gateways
-    info "ferrumgate started"
-    info "for more execute docker ps"
+    if [ ! -f "$ETC_DIR/preconfigure" ]; then
+        start_base_and_gateways
+        info "ferrumgate started"
+        info "for more execute docker ps"
+    else
+        info "ferrumgate is in preconfigure state"
+        info "delete file $ETC_DIR/preconfigure to start"
+    fi
 }
 
 stop_service() {
-
-    stop_base_and_gateways
-    docker ps | grep "fg-" | tr -s ' ' | cut -d' ' -f 1 | xargs -r docker stop
-    info "ferrumgate stopped"
-    info "for more execute docker ps"
+    if [ ! -f "$ETC_DIR/preconfigure" ]; then
+        stop_base_and_gateways
+        docker ps | grep "fg-" | tr -s ' ' | cut -d' ' -f 1 | xargs -r docker stop
+        info "ferrumgate stopped"
+        info "for more execute docker ps"
+    else
+        info "ferrumgate is in preconfigure state"
+        info "delete file $ETC_DIR/preconfigure to stop"
+    fi
 
 }
 restart_service() {
@@ -443,6 +456,9 @@ prepare_env() {
 }
 
 start_base_and_gateways() {
+    if [ -f "$ETC_DIR/preconfigure" ]; then
+        return
+    fi
     prepare_env
 
     if [ "$(is_cluster_working)" = "no" ]; then
@@ -475,6 +491,10 @@ stop_gateway() {
 }
 
 stop_base_and_gateways() {
+
+    if [ -f "$ETC_DIR/preconfigure" ]; then
+        return
+    fi
 
     for file in "$ETC_DIR"/*; do
         file=$(basename "$file")
@@ -1646,6 +1666,26 @@ cloud_join() {
 
 }
 
+reset() {
+    set_config DEPLOY_ID "$(random 16)"
+    set_config NODE_ID "$(random 16)"
+    set_config GATEWAY_ID "$(random 16)"
+    local REDIS_PASS=$(random 64)
+    set_config REDIS_PASS "$REDIS_PASS"
+    set_config REDIS_LOCAL_PASS "$REDIS_PASS"
+    set_config REDIS_INTEL_PASS "$REDIS_PASS"
+    local ES_PASS=$(random 64)
+    set_config ES_PASS "$ES_PASS"
+    set_config ES_INTEL_PASS "$ES_PASS"
+    set_config ENCRYPT_KEY "$(random 32)"
+
+    regenerate_cluster_ip
+    regenerate_cluster_ipw
+    recreate_cluster_keys
+    info "reset done"
+
+}
+
 main() {
     ensure_root
 
@@ -1693,6 +1733,7 @@ main() {
     cloud-join:,\
     cloud-test:,\
     cloud-update-workers:,\
+    reset,\
     all-logs' -- "$@") || exit
     eval set -- "$ARGS"
     local service_name=''
@@ -1953,6 +1994,11 @@ main() {
             shift 2
             break
             ;;
+        --reset)
+            opt=50
+            shift
+            break
+            ;;
         --)
             shift
             break
@@ -2015,6 +2061,7 @@ main() {
     [ $opt -eq 47 ] && cloud_join "$parameter_name" && exit 0
     [ $opt -eq 48 ] && cloud_test && exit 0
     [ $opt -eq 49 ] && cloud_update_workers "$parameter_name" && exit 0
+    [ $opt -eq 50 ] && reset && exit 0
 
 }
 

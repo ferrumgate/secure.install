@@ -524,7 +524,7 @@ services:
       - master
   
   ui:
-    image: "??PRIVATE_REGISTRY/ferrumgate/ui.portal:2.1.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/ui.portal:2.2.0"
     restart: always
     deploy:
       mode: global
@@ -538,7 +538,7 @@ services:
       - master
 
   rest:
-    image: "??PRIVATE_REGISTRY/ferrumgate/rest.portal:2.1.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/rest.portal:2.2.0"
     restart: always
     ports:
       - ${REST_HTTP_PORT}:8181
@@ -589,7 +589,7 @@ services:
       - master
 
   log:
-    image: "??PRIVATE_REGISTRY/ferrumgate/job.log:2.1.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.log:2.2.0"
     restart: always
     environment:
       - REDIS_HOST=${REDIS_PROXY_HOST}
@@ -629,7 +629,7 @@ services:
       - master
 
   log-parser:
-    image: "??PRIVATE_REGISTRY/ferrumgate/job.log:2.1.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.log:2.2.0"
     restart: always
     environment:
       - REDIS_HOST=${REDIS_PROXY_HOST}
@@ -664,7 +664,7 @@ services:
       - master
 
   task:
-    image: "??PRIVATE_REGISTRY/ferrumgate/job.task:2.1.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.task:2.2.0"
     restart: always
     environment:
       - REDIS_HOST=${REDIS_PROXY_HOST}
@@ -699,7 +699,7 @@ services:
       - master
 
   node:
-    image: "??PRIVATE_REGISTRY/ferrumgate/job.task:2.1.0"
+    image: "??PRIVATE_REGISTRY/ferrumgate/job.task:2.2.0"
     restart: always
     environment:
       - ROLES=${ROLES}
