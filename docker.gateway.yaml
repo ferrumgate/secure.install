@@ -28,12 +28,12 @@ services:
     profiles:
       - worker
 
-
   server-quic:
     image: "??PRIVATE_REGISTRY/ferrumgate/secure.server.quic:1.1.0"
     labels:
       FerrumGatewayId: "??GATEWAY_ID"
     restart: always
+    privileged: true
     ports:
       - "??SSH_PORT:9999/tcp"
       - "??SSH_PORT:9999/udp"
