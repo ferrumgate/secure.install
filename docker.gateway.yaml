@@ -52,8 +52,9 @@ services:
         delay: 5s
     depends_on:
       - prepare
-    volumes:
+    devices:
       - /dev/net/tun:/dev/net/tun
+    volumes:
       - /dev/urandom:/dev/urandom
       - ferrum:/etc/ferrumgate
     networks:
