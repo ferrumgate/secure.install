@@ -82,24 +82,24 @@ EOF
 
     fi
     LIMITS_FILE=/etc/security/limits.conf
-    SOFT_LIMIT=$(cat $LIMITS_FILE | grep "root soft nofile 1048576" | grep -v "#" | wc -l)
+    SOFT_LIMIT=$(cat $LIMITS_FILE | grep "root soft nofile 524288" | grep -v "#" | wc -l)
     if [ $SOFT_LIMIT -eq "0" ]; then
-        echo "root soft nofile 1048576" >>$LIMITS_FILE
+        echo "root soft nofile 524288" >>$LIMITS_FILE
     fi
-    HARD_LIMIT=$(cat $LIMITS_FILE | grep "root hard nofile 1048576" | grep -v "#" | wc -l)
+    HARD_LIMIT=$(cat $LIMITS_FILE | grep "root hard nofile 524288" | grep -v "#" | wc -l)
     if [ $HARD_LIMIT -eq "0" ]; then
-        echo "root hard nofile 1048576" >>$LIMITS_FILE
+        echo "root hard nofile 524288" >>$LIMITS_FILE
     fi
-    SOFT_LIMIT=$(cat $LIMITS_FILE | grep "* soft nofile 1048576" | grep -v "#" | wc -l)
+    SOFT_LIMIT=$(cat $LIMITS_FILE | grep "* soft nofile 524288" | grep -v "#" | wc -l)
     if [ $SOFT_LIMIT -eq "0" ]; then
-        echo "* soft nofile 1048576" >>$LIMITS_FILE
+        echo "* soft nofile 524288" >>$LIMITS_FILE
     fi
-    HARD_LIMIT=$(cat $LIMITS_FILE | grep "* hard nofile 1048576" | grep -v "#" | wc -l)
+    HARD_LIMIT=$(cat $LIMITS_FILE | grep "* hard nofile 524288" | grep -v "#" | wc -l)
     if [ $HARD_LIMIT -eq "0" ]; then
-        echo "* hard nofile 1048576" >>$LIMITS_FILE
+        echo "* hard nofile 524288" >>$LIMITS_FILE
     fi
-    ulimit -Sn 1048576
-    ulimit -Hn 1048576
+    ulimit -Sn 524288
+    ulimit -Hn 524288
 
     SYSCTL_FILE=/etc/sysctl.d/99-sysctl.conf
     if [ -n "$FERRUM_LXD" ]; then

@@ -94,7 +94,7 @@ download() {
     # Abort if download command failed
     [ $? -eq 0 ] || fatal 'Download failed'
 }
-VERSION=2.2.0
+VERSION=2.3.0
 download_and_verify() {
     if [ -d "./secure.install" ]; then
         rm -rf secure.install
@@ -117,8 +117,9 @@ print_usage() {
     echo "usage"
     echo "  ./install.sh [ -h | --help ]          -> prints help"
     echo "  ./install.sh [ -d | --docker ]        -> install with docker"
+    echo "  ./install.sh [ -s | --skip-download ] -> do not download install files, use previously downloaded files"
     echo "  ./install.sh [ -b | --bridge-network 10.9.0.0/24 ] -> docker bridge network"
-    echo "  ./install.sh [ -v | --version 1.6.0 ]  -> install custom version"
+    echo "  ./install.sh [ -v | --version 1.7.0 ]  -> install custom version"
 
 }
 
@@ -197,7 +198,7 @@ main() {
     # install type
     local INSTALL="docker"
     #local BRIDGE_NETWORK="10.9.0.0/24"
-    ARGS=$(getopt -o 'hdv:b:' --long 'help,docker,version:' -- "$@") || exit
+    ARGS=$(getopt -o 'hdsv:b:' --long 'help,docker,skip-download,version:' -- "$@") || exit
     eval "set -- $ARGS"
     local HELP=1
     while true; do
@@ -209,6 +210,11 @@ main() {
             ;;
         -d | --docker)
             INSTALL="docker"
+            shift
+            break
+            ;;
+        -s | --skip-download)
+            SKIP_DOWNLOAD=1
             shift
             break
             ;;
@@ -232,8 +238,13 @@ main() {
 
     setup_verify_arch
 
-    info "download install scripts from github"
-    download_and_verify
+    if [ $SKIP_DOWNLOAD -eq 1 ]; then
+        info "skip downloading"
+    else
+        info "download install scripts from github"
+        download_and_verify
+    fi
+    
 
     # after download add other scripts
     . ./sh/common.sh
